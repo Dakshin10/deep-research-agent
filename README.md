@@ -27,6 +27,21 @@ Featuring a premium, custom-styled dark-mode **Gradio** dashboard workspace.
 
 ---
 
+## 🖼️ Application Interface
+
+Here are a few screenshots showcasing the premium dark-themed Gradio dashboard in action:
+
+### 🏆 Final Research Report & Workspace
+![Final Research Report & Workspace](images/image.png)
+
+### 🔍 Gathered Web Evidence & Source Cards
+![Gathered Web Evidence & Source Cards](images/image%20copy.png)
+
+### 🧠 Under-the-hood Process & Reflection Accordeon
+![Process & Reflection](images/image%20copy%202.png)
+
+---
+
 ## 📐 System Architecture
 
 The workflow is modeled as a compiled **LangGraph** State Machine:
@@ -80,7 +95,7 @@ graph TD
 
 3. **Install dependencies**:
    ```bash
-   pip install langchain-groq langchain-tavily python-dotenv gradio langgraph pydantic
+   pip install -r requirements.txt
    ```
 
 4. **Set up environment variables**:
