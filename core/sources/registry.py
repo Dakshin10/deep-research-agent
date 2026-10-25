@@ -91,3 +91,20 @@ class SourceAdapterRegistry:
 
     def list_adapters(self) -> List[SourceAdapter]:
         return list(self._adapters.values())
+
+
+_default_source_registry = SourceAdapterRegistry()
+
+
+class SourceRegistry:
+    @classmethod
+    def get(cls, name: str) -> Optional[SourceAdapter]:
+        return _default_source_registry.get_adapter(name)
+
+    @classmethod
+    def get_for_domain(cls, domain: str) -> Optional[SourceAdapter]:
+        return _default_source_registry.get_adapter_for_domain(domain)
+
+    @classmethod
+    def list(cls) -> List[SourceAdapter]:
+        return _default_source_registry.list_adapters()

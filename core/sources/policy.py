@@ -72,6 +72,11 @@ class SourcePolicyEngine:
 
         return None
 
+    def is_domain_allowed(self, domain_or_url: str, is_search_result: bool = False) -> bool:
+        """Convenience boolean check for domain crawl permissions."""
+        allowed, _, _ = self.is_allowed(domain_or_url, is_search_result=is_search_result)
+        return allowed
+
     def is_allowed(
         self,
         domain_or_url: str,

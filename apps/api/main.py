@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import json
 import os
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -512,3 +513,93 @@ async def general_upload(
         "size_bytes": len(content),
         "tenant_id": tenant_id,
     }
+
+
+# --- Phase 2: Idea Miner Crawl Endpoints ---
+
+from core.crawl.schemas import CrawlRunConfig, CrawlRunRecord, CrawlMode
+from core.crawl.store import CrawlStore
+from core.crawl.engine import CrawlEngine
+from core.crawl.storage import RawDocumentStore
+
+_crawl_store: Optional[CrawlStore] = None
+
+
+def get_crawl_store() -> CrawlStore:
+    global _crawl_store
+    if _crawl_store is None:
+        os.makedirs("data", exist_ok=True)
+        db_url = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///data/crawl_engine.db")
+        _crawl_store = CrawlStore(db_url=db_url)
+    return _crawl_store
+
+
+@app.post("/v1/crawl/runs", response_model=CrawlRunRecord)
+async def start_crawl_run(
+    req: CrawlRunConfig,
+    background_tasks: BackgroundTasks,
+    store: CrawlStore = Depends(get_crawl_store),
+):
+    """Starts a bulk, resumable crawl run for a source."""
+    await store.init_db()
+    engine = CrawlEngine(store=store, doc_store=RawDocumentStore())
+
+    # Pre-register run in DB
+    run_id = f"crawl_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{os.urandom(3).hex()}"
+    run_record = CrawlRunRecord(
+        id=run_id,
+        source=req.source,
+        mode=req.mode,
+        since_date=req.since_date,
+        limit_pages=req.limit_pages,
+        config_override=req.model_dump(),
+    )
+    await store.create_crawl_run(run_record)
+
+    # Launch background task
+    background_tasks.add_task(engine.run, req)
+    return run_record
+
+
+@app.get("/v1/crawl/runs/{run_id}", response_model=CrawlRunRecord)
+async def get_crawl_run_status(
+    run_id: str,
+    store: CrawlStore = Depends(get_crawl_store),
+):
+    """Retrieves progress, counts, and domain errors for a crawl run."""
+    run = await store.get_crawl_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Crawl run not found")
+    return run
+
+
+@app.get("/v1/crawl/runs", response_model=List[CrawlRunRecord])
+async def list_crawl_runs(
+    limit: int = 50,
+    store: CrawlStore = Depends(get_crawl_store),
+):
+    """Lists recent crawl runs."""
+    await store.init_db()
+    return await store.list_crawl_runs(limit=limit)
+
+
+@app.get("/v1/crawl/runs/{run_id}/events")
+async def stream_crawl_events(
+    run_id: str,
+    store: CrawlStore = Depends(get_crawl_store),
+):
+    """Streams SSE events (page_fetched, page_blocked, page_skipped, crawl_completed)."""
+    async def event_generator():
+        async for evt in store.subscribe_events(run_id):
+            yield {
+                "event": evt.event_type,
+                "data": json.dumps({
+                    "run_id": evt.run_id,
+                    "event_type": evt.event_type,
+                    "payload": evt.payload,
+                    "timestamp": evt.timestamp.isoformat(),
+                }),
+            }
+
+    return EventSourceResponse(event_generator())
+

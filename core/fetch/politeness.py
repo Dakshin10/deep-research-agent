@@ -59,6 +59,20 @@ class RobotsCache:
 
         return rp.can_fetch(self.user_agent, url)
 
+    async def get_crawl_delay(self, url: str) -> Optional[float]:
+        """Return robots.txt crawl-delay for the user agent if specified."""
+        parsed = urllib.parse.urlparse(url)
+        domain = parsed.netloc.lower()
+        async with self._lock:
+            cached = self._parsers.get(domain)
+            if cached:
+                try:
+                    delay = cached[0].crawl_delay(self.user_agent)
+                    return float(delay) if delay is not None else None
+                except Exception:
+                    return None
+        return None
+
 
 class TokenBucketRateLimiter:
     """Per-domain token bucket rate limiter."""

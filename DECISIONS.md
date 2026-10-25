@@ -555,3 +555,36 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
 ### 18.4 Router & Registry Integration
 - Mapped source families `hackathons`, `startups`, `launches`, `writeups` into `core/search/router.py`.
 - Registered `HackathonsDataSource`, `StartupsDataSource`, and `WriteupsDataSource` in `core/tools/registry.py`.
+
+---
+
+## 19. Idea Miner Phase 2 Decisions: Bulk, Resumable, Incremental Crawler Architecture
+
+### 19.1 Frontier Storage & Concurrency Model (`db/schema_crawl.sql` & `core/crawl/store.py`)
+- Added tables `crawl_sources`, `crawl_frontier`, and `crawl_runs` designed for high-throughput distributed crawling.
+- Employs native PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED` for claiming pending items, guaranteeing that concurrent crawler workers never claim or process duplicate URLs.
+- Implemented SQLite emulation using atomic write locks for fast local unit testing without requiring external Postgres services.
+- Frontier insertion is strictly idempotent: unique constraint on `(source, canonical_url)` ensures duplicate URLs are ignored on re-discovery while preserving priority queues.
+
+### 19.2 Resumability and Incremental Refresh Lifecycle (`core/crawl/engine.py`)
+- Supported crawl execution modes:
+  - `discover`: Enumerates listing pages or sitemaps via source adapters and pushes candidate URLs to `crawl_frontier`.
+  - `fetch`: Downloads, verifies politeness, stores raw document payloads, and extracts project entities.
+  - `refresh`: Incremental conditional request sending `If-None-Match` (ETag) and `If-Modified-Since`. If HTTP 304 Not Modified or SHA-256 content hash matches previously fetched bytes, the item is marked `skipped` without consuming downstream extraction or LLM tokens.
+  - `all`: Sequentially runs discovery followed by continuous frontier consumption until configured limits are satisfied.
+- Resumability: Crashes or halts preserve the state of pending items in `crawl_frontier`; subsequent runs seamlessly pick up where the prior run stopped.
+
+### 19.3 Raw Document Store & Re-Verification Guarantee (`core/crawl/storage.py`)
+- Implemented `RawDocumentStore` persisting fetched raw payloads into compressed gzip files sharded by SHA-256 hash prefix (`data/raw_documents/<hash[:2]>/<hash>.gz`) with JSON metadata (`meta.json`).
+- Enables exact verbatim re-verification of all extracted structured fields against raw page content at any point in the future.
+
+### 19.4 Politeness, Circuit Breakers, and Honest Identity
+- Strictly enforces `config/source_policy.yaml`: Crawler refuses any domain not marked allowed or flagged denied, emitting `page_blocked(reason="policy_denied")`.
+- Enforces robots.txt via `RobotsCache` and respects `crawl-delay` directives.
+- Implemented per-domain `TokenBucketRateLimiter` (default 2 req/sec, capacity 4) and `CircuitBreaker` (trips after 3 consecutive 429/5xx errors into cooldown).
+- Honest User-Agent: Configurable via `CRAWL_USER_AGENT` or defaults to `DeepResearchBot/2.0 (+https://example.com/bot; contact@deep-research.local)`. No paywall/CAPTCHA bypass.
+
+### 19.5 CLI, REST API & Real-Time Event Streaming
+- CLI tool: `python -m core.crawl run --source devpost --since 2022 --limit 5000`.
+- API endpoints: `POST /v1/crawl/runs`, `GET /v1/crawl/runs/{id}`, `GET /v1/crawl/runs/{id}/events` (Server-Sent Events), `GET /v1/crawl/runs`.
+- SSE events: `crawl_started`, `page_fetched`, `page_blocked`, `page_skipped`, `adapter_broken`, `crawl_completed`.
