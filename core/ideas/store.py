@@ -205,13 +205,16 @@ class IdeaStore:
                 await session.commit()
         return record
 
-    async def get_idea(self, idea_id: str) -> Optional[IdeaRecord]:
+    upsert_idea = save_idea
+
+    async def get_idea(self, idea_id: str, tenant_id: Optional[str] = None) -> Optional[IdeaRecord]:
+        t_id = tenant_id or self.tenant_id
         async with await self.get_session() as session:
             stmt = select(IdeaRecordModel).where(IdeaRecordModel.id == idea_id)
-            if self.tenant_id:
+            if t_id:
                 stmt = stmt.where(
                     or_(
-                        IdeaRecordModel.tenant_id == self.tenant_id,
+                        IdeaRecordModel.tenant_id == t_id,
                         IdeaRecordModel.tenant_id.is_(None),
                     )
                 )
@@ -222,33 +225,58 @@ class IdeaStore:
 
     async def search_ideas(
         self,
-        query: str,
+        query: Optional[str] = None,
         *,
         limit: int = 20,
         filters: Optional[Dict[str, Any]] = None,
         min_similarity: float = 0.3,
+        tenant_id: Optional[str] = None,
+        year: Optional[int] = None,
+        event_name: Optional[str] = None,
+        placement: Optional[str] = None,
+        tech_stack: Optional[List[str]] = None,
+        domain_tags: Optional[List[str]] = None,
+        source_kind: Optional[str] = None,
     ) -> List[IdeaRecord]:
         """
         Hybrid semantic + keyword search with domain/tech/placement/year filters.
         Excludes records that have been merged into another record.
         """
-        query_vec = self.embedder.embed_text(query)
-        keywords = [k.lower() for k in query.split() if len(k) >= 2]
+        effective_filters = dict(filters or {})
+        if year is not None:
+            effective_filters["year"] = year
+        if event_name is not None:
+            effective_filters["event_name"] = event_name
+        if placement is not None:
+            effective_filters["placement"] = placement
+        if tech_stack is not None:
+            effective_filters["tech_stack"] = tech_stack
+        if domain_tags is not None:
+            effective_filters["domain_tags"] = domain_tags
+        if source_kind is not None:
+            effective_filters["source_kind"] = source_kind
+
+        query_str = query or ""
+        query_vec = self.embedder.embed_text(query_str) if query_str else None
+        keywords = [k.lower() for k in query_str.split() if len(k) >= 2]
+
+        t_id = tenant_id or self.tenant_id
 
         async with await self.get_session() as session:
             stmt = select(IdeaRecordModel).where(IdeaRecordModel.merged_into_id.is_(None))
 
             # Multi-tenancy isolation
-            if self.tenant_id:
+            if t_id:
                 stmt = stmt.where(
                     or_(
-                        IdeaRecordModel.tenant_id == self.tenant_id,
+                        IdeaRecordModel.tenant_id == t_id,
                         IdeaRecordModel.tenant_id.is_(None),
                     )
                 )
 
             # Apply filters
-            if filters:
+            if effective_filters:
+                filters = effective_filters
                 if "year" in filters and filters["year"]:
                     stmt = stmt.where(IdeaRecordModel.year == int(filters["year"]))
                 if "event_name" in filters and filters["event_name"]:
@@ -292,7 +320,7 @@ class IdeaStore:
                 kw_score = min(1.0, kw_matches / max(1, len(keywords)))
 
                 score = (0.65 * cos_sim) + (0.35 * kw_score)
-                if score >= min_similarity or kw_score > 0.0 or bool(filters):
+                if (not query_str and not bool(filters)) or score >= min_similarity or kw_score > 0.0 or bool(filters):
                     scored_records.append((score, record))
 
             scored_records.sort(key=lambda x: x[0], reverse=True)

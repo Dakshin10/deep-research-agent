@@ -288,3 +288,55 @@ def record_provider_span(
         status="error" if error else "success",
         error=error,
     )
+
+
+def record_crawl_span(
+    source: str,
+    run_id: str,
+    pages_crawled: int,
+    duration: float,
+    error: Optional[str] = None,
+) -> TraceEvent:
+    """Records a Langfuse span for a crawler run tracking pages and rate."""
+    tracer = get_tracer()
+    pages_per_sec = round(pages_crawled / max(0.01, duration), 2)
+    return tracer.record_trace(
+        name=f"crawl_{source}",
+        trace_type="crawl",
+        inputs={"source": source, "run_id": run_id},
+        outputs={"pages_crawled": pages_crawled, "pages_per_sec": pages_per_sec},
+        duration=duration,
+        status="error" if error else "success",
+        error=error,
+    )
+
+
+def record_extraction_batch_span(
+    source: str,
+    batch_size: int,
+    ideas_extracted: int,
+    duration: float,
+    estimated_cost_usd: Optional[float] = None,
+    error: Optional[str] = None,
+) -> TraceEvent:
+    """
+    Records a Langfuse span for an idea extraction batch, tracking throughput
+    and estimated model cost per 1,000 pages (defaulting to ~$0.15 / 1k pages).
+    """
+    tracer = get_tracer()
+    cost = estimated_cost_usd if estimated_cost_usd is not None else round((batch_size / 1000.0) * 0.15, 4)
+    cost_per_1k = round((cost / max(1, batch_size)) * 1000.0, 4)
+    return tracer.record_trace(
+        name=f"extract_{source}",
+        trace_type="extraction",
+        inputs={"source": source, "batch_size": batch_size},
+        outputs={
+            "ideas_extracted": ideas_extracted,
+            "cost_usd": cost,
+            "cost_per_1000_pages_usd": cost_per_1k,
+        },
+        duration=duration,
+        status="error" if error else "success",
+        error=error,
+    )
+

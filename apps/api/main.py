@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 from datetime import datetime, timezone
+import io
 import json
 import os
 import uuid
@@ -602,4 +604,222 @@ async def stream_crawl_events(
             }
 
     return EventSourceResponse(event_generator())
+
+
+# --- Phase 6: Idea Miner API Endpoints ---
+
+from core.ideas.schemas import (
+    IdeaRecord,
+    IdeaBrief,
+    IdeaCard,
+    ProjectPlacement,
+    ProjectStage,
+    EvidenceEntry,
+)
+from core.ideas.store import IdeaStore
+from core.ideas.generator import IdeaGeneratorAgent
+from skills.idea_analysis.engine import IdeaAnalysisEngine
+from core.sources.policy import SourcePolicyEngine
+
+_idea_store: Optional[IdeaStore] = None
+
+
+def get_idea_store() -> IdeaStore:
+    global _idea_store
+    if _idea_store is None:
+        os.makedirs("data", exist_ok=True)
+        db_url = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///data/idea_miner.db")
+        _idea_store = IdeaStore(db_url=db_url)
+    return _idea_store
+
+
+class IdeaSearchRequest(BaseModel):
+    query: Optional[str] = None
+    year: Optional[int] = None
+    event_name: Optional[str] = None
+    placement: Optional[str] = None
+    tech_stack: Optional[List[str]] = None
+    domain_tags: Optional[List[str]] = None
+    limit: int = 20
+
+
+@app.post("/v1/ideas/search", response_model=List[IdeaRecord])
+async def search_ideas(
+    req: IdeaSearchRequest,
+    store: IdeaStore = Depends(get_idea_store),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Hybrid semantic + keyword search with metadata filters."""
+    await store.init_db()
+    results = await store.search_ideas(
+        query=req.query,
+        tenant_id=tenant_id,
+        year=req.year,
+        event_name=req.event_name,
+        placement=req.placement,
+        tech_stack=req.tech_stack,
+        domain_tags=req.domain_tags,
+        limit=req.limit,
+    )
+    return results
+
+
+@app.get("/v1/ideas/clusters")
+async def get_idea_clusters(
+    n_clusters: Optional[int] = None,
+    store: IdeaStore = Depends(get_idea_store),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Clusters ideas into semantic themes with representative projects and top tags."""
+    await store.init_db()
+    ideas = await store.search_ideas(query=None, tenant_id=tenant_id, limit=200)
+    engine = IdeaAnalysisEngine()
+    clusters = engine.cluster(ideas, n_clusters=n_clusters)
+    return {"sample_size": len(ideas), "clusters": [c.model_dump() for c in clusters]}
+
+
+@app.get("/v1/ideas/trends")
+async def get_idea_trends(
+    store: IdeaStore = Depends(get_idea_store),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Returns win rates, saturated vs underexplored categories, and winner patterns."""
+    await store.init_db()
+    ideas = await store.search_ideas(query=None, tenant_id=tenant_id, limit=300)
+    engine = IdeaAnalysisEngine()
+    trends_rep = engine.trends(ideas)
+    winners_rep = engine.winner_patterns(ideas)
+    return {
+        "trends": trends_rep.model_dump(),
+        "winner_patterns": winners_rep.model_dump(),
+    }
+
+
+@app.get("/v1/ideas/{idea_id}", response_model=IdeaRecord)
+async def get_idea(
+    idea_id: str,
+    store: IdeaStore = Depends(get_idea_store),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Retrieves an IdeaRecord including its verified evidence entries."""
+    await store.init_db()
+    idea = await store.get_idea(idea_id=idea_id, tenant_id=tenant_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea record not found")
+    return idea
+
+
+@app.post("/v1/ideas/generate", response_model=List[IdeaCard])
+async def generate_ideas(
+    brief: IdeaBrief,
+    store: IdeaStore = Depends(get_idea_store),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Generates grounded IdeaCards from a brief, citing 3-8 verified inspirations."""
+    await store.init_db()
+    ref_ideas = await store.search_ideas(query=brief.problem_statement, tenant_id=tenant_id, limit=20)
+    if not ref_ideas:
+        ref_ideas = await store.search_ideas(query=None, tenant_id=tenant_id, limit=20)
+
+    engine = IdeaAnalysisEngine()
+    clusters = engine.cluster(ref_ideas) if ref_ideas else []
+
+    generator = IdeaGeneratorAgent()
+    cards = await generator.generate_cards(
+        brief=brief,
+        reference_ideas=ref_ideas,
+        clusters=clusters,
+    )
+    return cards
+
+
+class IdeaImportRequest(BaseModel):
+    format: str = "json"  # "json" | "csv"
+    data: str  # JSON array string or CSV string
+
+
+@app.post("/v1/ideas/import")
+async def import_ideas(
+    req: IdeaImportRequest,
+    store: IdeaStore = Depends(get_idea_store),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """
+    Imports ideas via JSON or CSV for sources not permitted to crawl
+    (e.g., LinkedIn, Crunchbase, X).
+    """
+    await store.init_db()
+    imported_count = 0
+    errors = []
+
+    if req.format.lower() == "json":
+        try:
+            items = json.loads(req.data)
+            if not isinstance(items, list):
+                items = [items]
+            for it in items:
+                rec = IdeaRecord.model_validate(it)
+                rec.tenant_id = tenant_id
+                await store.upsert_idea(rec)
+                imported_count += 1
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse JSON: {e}")
+    elif req.format.lower() == "csv":
+        try:
+            reader = csv.DictReader(io.StringIO(req.data))
+            for row in reader:
+                pid = row.get("id") or str(uuid.uuid4())
+                name = row.get("name") or row.get("title") or "Imported Idea"
+                prob = row.get("problem") or ""
+                sol = row.get("solution") or row.get("solution_sketch") or ""
+                stack = [s.strip() for s in (row.get("tech_stack") or "").split(",") if s.strip()]
+                dom = [d.strip() for d in (row.get("domain_tags") or "").split(",") if d.strip()]
+                rec = IdeaRecord(
+                    id=pid,
+                    tenant_id=tenant_id,
+                    name=name,
+                    problem=prob,
+                    solution=sol,
+                    tech_stack=stack,
+                    domain_tags=dom,
+                    first_seen_url=row.get("first_seen_url") or "manual://import",
+                )
+                await store.upsert_idea(rec)
+                imported_count += 1
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {e}")
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported format: must be 'json' or 'csv'")
+
+    return {"status": "success", "imported_count": imported_count, "errors": errors}
+
+
+@app.get("/v1/sources/coverage")
+async def get_sources_coverage(
+    policy_engine: SourcePolicyEngine = Depends(lambda: SourcePolicyEngine()),
+):
+    """Returns coverage breakdown across all source families and domain policies."""
+    policies = policy_engine.policy
+    total_sources = len(policies)
+    allowed_count = sum(1 for p in policies.values() if p.get("allowed", False))
+    denied_count = total_sources - allowed_count
+
+    breakdown = []
+    for domain, pol in policies.items():
+        breakdown.append({
+            "domain": domain,
+            "allowed": pol.get("allowed", False),
+            "access_method": pol.get("access_method", "search_engine"),
+            "rate_limit_rps": pol.get("rate_limit_rps", 1.0),
+            "max_pages_per_run": pol.get("max_pages_per_run", 100),
+            "notes": pol.get("notes", ""),
+        })
+
+    return {
+        "total_sources_configured": total_sources,
+        "allowed_sources": allowed_count,
+        "denied_sources": denied_count,
+        "sources": breakdown,
+    }
+
 

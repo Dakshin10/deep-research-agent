@@ -41,6 +41,11 @@ class SourcePolicyEngine:
                 pass
         return {}
 
+    @property
+    def policy(self) -> Dict[str, Any]:
+        """Returns the dictionary of configured site policies."""
+        return self._policy.get("sites", {})
+
     def normalize_domain(self, domain_or_url: str) -> str:
         """Extract clean lowercased domain without port or trailing slashes."""
         if "://" in domain_or_url:

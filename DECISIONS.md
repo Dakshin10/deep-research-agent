@@ -689,3 +689,29 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
 - **CSV**: Tabular summary for spreadsheet scoring and evaluation.
 - **PowerPoint (`.pptx`)**: Generates presentation slide decks via `PPTXGenerator` strictly enforcing the <= 5 bullets per slide ceiling and zero empty shapes rule.
 - All 5 unit and integration tests passed 100% in `tests/test_phase5_generation.py`.
+
+---
+
+## 23. Idea Miner Phase 6 Decisions: API Endpoints, Gradio UI & Langfuse Spans
+
+### 23.1 REST API Architecture (`apps/api/main.py`)
+- Implemented 6 new endpoints supporting Idea Miner operations:
+  1. `POST /v1/ideas/search`: Hybrid semantic vector search + keyword search with multi-attribute filtering (`year`, `event_name`, `placement`, `tech_stack`, `domain_tags`).
+  2. `GET /v1/ideas/{id}`: Retrieves complete `IdeaRecord` including verbatim excerpts, character offsets, and text fragment URLs.
+  3. `GET /v1/ideas/clusters`: Groups active corpus into semantic clusters with representative projects and top technology tags.
+  4. `GET /v1/ideas/trends`: Evaluates category win rates, saturation levels, underexplored niches, and statistical winner vs non-winner features.
+  5. `POST /v1/ideas/generate`: Grounded synthesis of `IdeaCard` portfolios adhering to time-limit constraints and verified inspirations.
+  6. `POST /v1/ideas/import`: Enables bulk JSON/CSV ingestion for restricted networks (LinkedIn, Crunchbase, X).
+  7. `GET /v1/sources/coverage`: Audits all 20+ configured source policies, reporting allowed vs denied status and access methods.
+
+### 23.2 Gradio UI Extension (`app.py`)
+- Extended `app.py` with 4 modern, responsive Idea Miner tabs alongside the Deep Research Engine:
+  - **Crawl Monitor**: Select source adapter (`devpost`, `ycombinator`, `github`, etc.), execution mode (`discover`, `fetch`, `refresh`, `all`), and trigger runs with real-time status summaries.
+  - **Idea Explorer**: Interactive search bar with domain, tech stack, and prize placement filters; displays an evidence table with clickable `#:~:text=` text fragment links.
+  - **Trends & Clusters**: One-click analysis dashboard computing semantic clusters, saturated vs underexplored domains, and defensive winner feature statistics.
+  - **Idea Generator**: Configurable ideation studio (problem brief, domain focus, tech constraints, time limit); renders generated `IdeaCard`s with verified inspirations and event rule warnings.
+
+### 23.3 Langfuse Cost & Throughput Instrumentation (`core/observability/tracing.py`)
+- Added `record_crawl_span`: Captures per-source crawling throughput (`pages_crawled`, `pages_per_sec`, duration).
+- Added `record_extraction_batch_span`: Tracks idea extraction yield and calculates estimated LLM token costs per 1,000 pages (benchmarked at ~$0.15 / 1k pages).
+- All 6 unit and integration tests passed 100% in `tests/test_phase6_api_ui.py`.
