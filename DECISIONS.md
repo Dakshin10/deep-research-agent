@@ -662,3 +662,30 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
 - Generates structured Markdown reports citing sample sizes and linking to verified evidence locations.
 - Provides optional `matplotlib` chart rendering for visual win-rate dashboards.
 - All 5 unit and integration tests passed 100% in `tests/test_phase4_analysis.py`.
+
+---
+
+## 22. Idea Miner Phase 5 Decisions: Idea Generation Grounded in Evidence
+
+### 22.1 Structured IdeaCard & Inspiration Schema (`core/ideas/schemas.py`)
+- Created `IdeaCard` schema capturing: `id`, `title`, `problem`, `target_users`, `solution_sketch`, `why_now`, `suggested_tech_stack`, `architecture_sketch`, `mvp_scope`, `differentiation`, `risks`, `inspirations`, `novelty_score`, `closest_existing_projects`, `past_winner_rules_warning`, `originality_verified`, `regeneration_notes`.
+- Defined `IdeaInspiration` model linking each inspiration to its `source_url`, `verified_location` (`#:~:text=` text fragment or exact page URL), `key_takeaway`, and `was_winner` status.
+
+### 22.2 Originality Guardrail & Past-Winner Compliance Gate (`core/ideas/guardrails.py`)
+- Implemented `OriginalityGuardrail`:
+  1. **Configurable Similarity Threshold (0.80 default)**: Computes dense cosine similarity against all crawled projects. If similarity > 0.80, the agent automatically refines the card into an explicit architectural improvement, documenting concrete differentiators and appending regeneration audit notes.
+  2. **Verbatim Phrase Copying Prohibition**: Hard rejection if candidate solution directly matches > 40 continuous characters from reference project texts; mandates paraphrasing and attribution.
+  3. **Event Rules Compliance Notice**: If any inspiration was an official prize winner, injects an unavoidable warning notice: `"EVENT RULE WARNING: Inspiration was an official prize winner... Most hackathons prohibit clone submissions. Ensure this card is implemented with net-new architecture."`
+  4. Calculates verifiable `novelty_score = 1.0 - max_similarity` and attaches the top 3 closest reference projects.
+
+### 22.3 Grounded Idea Generator Agent (`core/ideas/generator.py`)
+- Implemented `IdeaGeneratorAgent` synthesizing candidate cards from problem briefs, constraints (tech stack, team size, time limit), and empirical reference projects.
+- Ensures each card includes 3 to 8 verified inspirations with exact locations.
+- Calibrates `mvp_scope` specifically to the provided time limit (e.g. 24-hour vs 36-hour hackathons).
+
+### 22.4 Multi-Format Export Engine (`core/ideas/export.py`)
+- **Markdown**: Comprehensive report detailing problem, architecture diagram, MVP scope, risks, and clickable verified evidence links.
+- **JSON**: Machine-readable Pydantic JSON array.
+- **CSV**: Tabular summary for spreadsheet scoring and evaluation.
+- **PowerPoint (`.pptx`)**: Generates presentation slide decks via `PPTXGenerator` strictly enforcing the <= 5 bullets per slide ceiling and zero empty shapes rule.
+- All 5 unit and integration tests passed 100% in `tests/test_phase5_generation.py`.

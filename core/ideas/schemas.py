@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
+import uuid
 from pydantic import BaseModel, Field
 
 
@@ -74,3 +75,42 @@ class IdeaRecord(BaseModel):
             f"Domain: {', '.join(self.domain_tags)}",
         ]
         return "\n".join(p for p in parts if p.strip())
+
+
+class IdeaBrief(BaseModel):
+    problem_statement: str
+    domain: Optional[str] = None
+    constraints: Dict[str, Any] = Field(default_factory=dict)
+    num_cards: int = 5
+
+
+class IdeaInspiration(BaseModel):
+    project_id: str
+    project_name: str
+    source_url: str
+    verified_location: Optional[str] = None
+    key_takeaway: str
+    was_winner: bool = False
+    winner_warning: Optional[str] = None
+
+
+class IdeaCard(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    problem: str
+    target_users: str
+    solution_sketch: str
+    why_now: str
+    suggested_tech_stack: List[str] = Field(default_factory=list)
+    architecture_sketch: str
+    mvp_scope: str
+    differentiation: str
+    risks: List[str] = Field(default_factory=list)
+    inspirations: List[IdeaInspiration] = Field(default_factory=list)
+    novelty_score: float = 0.5  # 1.0 - max cosine similarity to existing records
+    closest_existing_projects: List[Dict[str, Any]] = Field(default_factory=list)
+    past_winner_rules_warning: Optional[str] = None
+    originality_verified: bool = True
+    regeneration_notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
