@@ -44,3 +44,4 @@ mypy>=1.11.0
 feedparser>=6.0.14
 yt-dlp>=2026.10.21
 youtube-transcript-api>=1.2.4
+scikit-learn>=1.4.0

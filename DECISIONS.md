@@ -622,3 +622,43 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
   - Dense cosine similarity over canonical text embeddings (`Project: ...\nProblem: ...\nSolution: ...\nTech Stack: ...`).
   - Lexical keyword overlap with support for 2-letter tokens (`AI`, `ML`, `Go`, `VR`, `AR`).
   - Metadata filtering by `year`, `event_name`, `placement`, `tech_stack`, `domain_tags`.
+
+---
+
+## 21. Idea Miner Phase 4 Decisions: Sandboxed Analysis Engine
+
+### 21.1 Dependencies Added (`requirements.txt`)
+- `scikit-learn>=1.4.0`: BSD-3-Clause license (permissive). Required for efficient, robust KMeans and clustering over high-dimensional vector embeddings, silhouette evaluation, and nearest neighbor operations.
+
+### 21.2 Semantic Clustering (`skills/idea_analysis/clustering.py`)
+- Groups crawled projects by embedding space proximity using KMeans (or HDBSCAN where supported) with deterministic fallbacks.
+- Calculates true centroid vectors and discovers the top 3 nearest representative projects per cluster.
+- Computes top domain tags and technology stacks, labeling clusters cleanly (e.g. `Healthcare / PyTorch (12 projects)`).
+- Every cluster output explicitly states its cluster size and total evaluated sample size `N`.
+
+### 21.3 Temporal Trends & Saturation Engine (`skills/idea_analysis/trends.py`)
+- Tracks project volume and empirical win rates across domains, tech stacks, and chronological years.
+- Implements objective saturation classification:
+  - **Saturated**: Above-median submission volume coupled with below-median win rates (crowded categories with poor odds).
+  - **Underexplored**: Below-median submission volume coupled with above-median win rates (high-yield whitespace opportunities).
+- States sample sizes `N` across all statistical outputs and includes verified example project IDs.
+
+### 21.4 Defensible Winner Pattern Analysis (`skills/idea_analysis/winner_patterns.py`)
+- Compares winning projects (`winner`, `runner_up`, `track_prize`) against non-winners on verifiable empirical features:
+  1. Working demo URL presence.
+  2. Pitch video URL presence.
+  3. Average team size.
+  4. Problem statement specificity (character length of verified problem description).
+- **Statistical Integrity (Hard Rule)**: Strictly prohibits causal claims; outputs defensive observational phrasing ("observed correlation only") and reports exact sample sizes `n_winners`, `n_non_winners`, and `total_sample_size`.
+
+### 21.5 Whitespace Gap Detection (`skills/idea_analysis/whitespace.py`)
+- Takes arbitrary target problem statements (e.g. uploaded SIH problem statement PDFs, track briefs, or user concepts) and embeds them.
+- Evaluates cosine proximity against all existing projects, computing `overall_novelty_score = 1.0 - max_similarity`.
+- Retrieves the closest existing projects with verified evidence locations so researchers can benchmark against prior art.
+- Scans the cross-product of target domains and tech stacks to pinpoint unbuilt combinations with minimal prior entries, formulating concrete whitespace opportunities.
+
+### 21.6 Unified Analysis Engine & Reporting (`skills/idea_analysis/engine.py`)
+- Implemented `IdeaAnalysisEngine` aggregating clustering, trends, winner comparisons, and whitespace gap detection.
+- Generates structured Markdown reports citing sample sizes and linking to verified evidence locations.
+- Provides optional `matplotlib` chart rendering for visual win-rate dashboards.
+- All 5 unit and integration tests passed 100% in `tests/test_phase4_analysis.py`.
