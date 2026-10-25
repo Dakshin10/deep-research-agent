@@ -1,0 +1,80 @@
+searxng:
+  url: "http://localhost:8080"
+  timeout_seconds: 8.0
+  categories: ["general", "news", "science", "it"]
+  engines: ["google", "duckduckgo", "bing", "wikipedia", "arxiv", "github"]
+
+routing:
+  default_family: "web_general"
+  min_hits_threshold: 2
+  rrf_k: 60
+  simhash_max_distance: 3
+
+providers:
+  default: "searxng"
+  searxng:
+    enabled: true
+    timeout_seconds: 8.0
+  duckduckgo:
+    enabled: true
+  hacker_news:
+    enabled: true
+  reddit:
+    enabled: true
+  stack_exchange:
+    enabled: true
+  github:
+    enabled: true
+  arxiv:
+    enabled: true
+  openalex:
+    enabled: true
+  wikipedia:
+    enabled: true
+  youtube:
+    enabled: true
+  bluesky:
+    enabled: true
+  mastodon:
+    enabled: true
+  apple_app_store:
+    enabled: true
+  google_play:
+    enabled: true
+  wayback_cdx:
+    enabled: true
+  marginalia:
+    enabled: true
+  tavily:
+    enabled: false
+    search_depth: "advanced"
+    max_results: 5
+    include_raw_content: false
+  exa:
+    enabled: false
+    max_results: 5
+    use_autoprompt: true
+  crawl4ai:
+    max_markdown_chars: 10000
+    strip_tags: ["script", "style", "nav", "footer", "aside"]
+
+knowledge_base:
+  top_k: 8
+  hybrid_weight_vector: 0.7
+  hybrid_weight_keyword: 0.3
+  chunk_size_tokens: 800
+  chunk_overlap_tokens: 100
+
+data_sources:
+  enable_source_router: true
+  default_sources: ["searxng", "duckduckgo", "kb_retrieve", "crawl4ai"]
+  reddit:
+    enabled: true
+    subreddit_limit: 5
+  ga4_mcp:
+    enabled: true
+    read_only: true
+  hubspot_mcp:
+    enabled: true
+    read_only: true
+    allowed_tools: ["search_companies", "get_company", "search_deals", "get_deal", "search_contacts"]

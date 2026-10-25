@@ -1,0 +1,24 @@
+rules:
+  - id: "unsubstantiated_roi"
+    description: "Claims promising specific financial ROI or guaranteed growth without an explicit case-study citation."
+    severity: "high"
+    patterns:
+      - "(?i)guaranteed?\\s+(?:\\d+%|roi|growth|returns)"
+      - "(?i)100%\\s+(?:roi|success|guarantee)"
+    action: "rewrite"
+
+  - id: "unverified_superlatives"
+    description: "Unverified claims declaring an entity #1, the absolute best, or industry leader without source."
+    severity: "medium"
+    patterns:
+      - "(?i)#1\\s+(?:rated|platform|provider)"
+      - "(?i)undisputed\\s+leader"
+    action: "flag"
+
+  - id: "confidential_leakage"
+    description: "Claims referencing internal confidential leak material or trade secret terminology."
+    severity: "high"
+    patterns:
+      - "(?i)internal\\s+confidential"
+      - "(?i)under\\s+strict\\s+nda"
+    action: "block"

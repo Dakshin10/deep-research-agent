@@ -1,0 +1,19 @@
+tenants:
+  tenant_marketing_corp:
+    rules:
+      - id: "competitor_disparagement"
+        description: "Do not directly insult or disparage named competitors in public reports."
+        severity: "high"
+        patterns:
+          - "(?i)inferior\\s+fraud"
+          - "(?i)scam\\s+competitor"
+        action: "rewrite"
+
+  tenant_fintech_plus:
+    rules:
+      - id: "disclaimer_mandatory"
+        description: "All market prediction summaries must include the financial risk disclaimer."
+        severity: "high"
+        patterns:
+          - "(?i)foolproof\\s+investment"
+        action: "block"

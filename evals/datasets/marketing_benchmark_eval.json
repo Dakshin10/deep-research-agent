@@ -1,0 +1,29 @@
+[
+  {
+    "id": "eval_01",
+    "name": "B2B Marketing Automation Competitor Teardown",
+    "query": "Comprehensive competitive teardown of HubSpot vs Salesforce for B2B mid-market",
+    "expected_entities": ["HubSpot", "Salesforce"],
+    "required_metrics": ["pricing", "market_growth"],
+    "min_citation_coverage": 1.0,
+    "max_steps_allowed": 25
+  },
+  {
+    "id": "eval_02",
+    "name": "Paid Acquisition Channel Benchmark Analysis",
+    "query": "Benchmark analysis of Paid Search vs Social CPA and ROAS",
+    "expected_entities": ["Paid Search", "Social"],
+    "required_metrics": ["cpa", "roas"],
+    "min_citation_coverage": 1.0,
+    "max_steps_allowed": 20
+  },
+  {
+    "id": "eval_03",
+    "name": "Omnichannel Retail Campaign Conversion Audit",
+    "query": "Audit of retail omnichannel marketing conversion rates and retention",
+    "expected_entities": ["Omnichannel Retail"],
+    "required_metrics": ["conversion_rate", "retention"],
+    "min_citation_coverage": 1.0,
+    "max_steps_allowed": 15
+  }
+]
