@@ -27,6 +27,7 @@ The service is strictly grounded in three distinct knowledge tiers:
 - [Observability, Telemetry & Cost Control](#-observability-telemetry--cost-control)
 - [Interactive Gradio Visualizer](#-interactive-gradio-visualizer)
 - [API Reference & Server-Sent Events (SSE)](#-api-reference--server-sent-events-sse)
+- [Idea Miner Domain Profile](#-idea-miner-domain-profile)
 - [Repository Structure & File Map](#-repository-structure--file-map)
 - [Getting Started & Local Setup](#-getting-started--local-setup)
 - [Verification & Test Suite](#-verification--test-suite)
@@ -411,6 +412,72 @@ Subscribing to `/v1/jobs/{job_id}/events` streams real-time JSON events:
 
 ---
 
+## 💡 Idea Miner Domain Profile
+
+The **Idea Miner** domain profile extends the platform with continuous discovery, structured idea extraction, and grounded ideation over hackathons, startups, launches, and developer writeups. All domain-specific settings reside in `config/domains/idea_mining.yaml`, `config/source_policy.yaml`, and `skills/idea_*/SKILL.md`.
+
+### 1. Source Policy & 21 Domain Adapters
+- **Source Policy Engine (`config/source_policy.yaml`)**:
+  - Enforces access rules: `api`, `rss`, `sitemap`, or `html` with strict rate limits and crawl delays.
+  - Denies restricted sites by default: `linkedin.com`, `x.com`/`twitter.com`, `facebook.com`, `instagram.com`, `crunchbase.com`.
+  - CLI policy inspection:
+    ```bash
+    python -m core.sources.policy check devpost.com
+    ```
+- **21 Domain Adapters (`core/sources/adapters/`)**:
+  - **Hackathons**: Devpost, Devfolio, DoraHacks, ETHGlobal, MLH, Unstop, Hack2skill, Smart India Hackathon (SIH), Kaggle, GitHub Hackathons.
+  - **Startups & Launches**: Y Combinator Directory, Product Hunt API, Hacker News Launches (Algolia API), BetaList, Indie Hackers, Reddit Startup Communities.
+  - **Writeups & Media**: Dev.to, Hashnode, Medium/Substack RSS, YouTube Pitch Transcripts, Conference Talk Pages, Pitch Deck PDFs (PyMuPDF).
+  - Every adapter is integrated as a `SearchProvider` and `DataSource` with recorded fixtures and fails loudly with an `adapter_broken` event rather than returning silent empty data.
+
+### 2. Resumable Incremental Crawler
+- **PostgreSQL Crawl Frontier (`crawl_frontier`, `crawl_sources`, `crawl_runs`)**:
+  - Worker claim protocol using `SELECT ... FOR UPDATE SKIP LOCKED`.
+  - Modes: `discover` (listing exploration), `fetch` (raw document download), and `refresh` (skipping unchanged pages via ETag/Last-Modified/SHA-256 hash).
+  - Fully idempotent and crash-resumable.
+  - CLI execution:
+    ```bash
+    python -m core.crawl run --source devpost --since 2022 --limit 5000
+    ```
+
+### 3. Verbatim Extraction & Entity Resolution
+- **IdeaRecord Schema**: Structured records capturing `name`, `one_liner`, `problem`, `solution`, `target_users`, `domain_tags`, `tech_stack`, `stage`, `traction`, `source_kind`, `placement`, `team_size`, `links`, and verified evidence locations.
+- **Verbatim Excerpt Verification (HARD RULE)**: Every claim and placement must be backed by an exact verbatim excerpt (`<= 200 chars`). If not found in the raw document, the field is dropped to `None` and a `field_rejected` event is emitted.
+- **Privacy Scrubbing**: Automatic detection and redaction of emails, phone numbers, and private social handles. Contributor names are suppressed by default.
+- **Lossless Entity Resolution**: Merges duplicates across multiple sources (Devpost, GitHub, YouTube, Blogs) via exact URLs and semantic cosine similarity, with reversible `unmerge_idea` support.
+
+### 4. Sandboxed Analysis Engine
+- **Clustering (`skills/idea_analysis/clustering.py`)**: HDBSCAN/K-Means over embeddings producing named clusters with representative projects.
+- **Trends & Win Rates (`skills/idea_analysis/trends.py`)**: Saturated vs underexplored categories and historical win rates.
+- **Defensible Winner Patterns (`skills/idea_analysis/winner_patterns.py`)**: Compares winners vs non-winners on stack choices, demo presence, and team sizes; strictly enforces non-causal observational reporting with explicit sample sizes.
+- **Whitespace Gap Detection (`skills/idea_analysis/whitespace.py`)**: Unbuilt cross-combinations of tech stacks and problem statements with novelty scores (`1.0 - max_similarity`).
+
+### 5. Grounded Idea Generation & Quality Guardrails
+- **Idea Generator Agent (`core/ideas/generator.py`)**: Synthesizes `IdeaCard` portfolios citing 3-8 verified inspirations.
+- **Originality Guardrail (`core/ideas/guardrails.py`)**:
+  - Maximum 0.80 cosine similarity ceiling; automatically refines close matches into explicit architectural improvements.
+  - Prohibits verbatim copying (> 40 consecutive chars).
+  - Enforces mandatory past-winner event compliance warnings to prevent submission disqualification.
+- **Multi-Format Exports (`core/ideas/export.py`)**: Generates Markdown, JSON, CSV, and PowerPoint decks (strictly obeying <= 5 bullets per slide and zero empty shapes).
+
+### 6. Idea Miner API & Gradio UI
+- **Endpoints**:
+  - `POST /v1/ideas/search`: Hybrid dense vector + keyword search with filters (`year`, `placement`, `tech_stack`, `domain_tags`).
+  - `GET /v1/ideas/{id}`: Detailed idea record with verified location excerpts.
+  - `GET /v1/ideas/clusters`: Semantic project clusters and representative exemplars.
+  - `GET /v1/ideas/trends`: Win rates, domain saturation, and winner feature statistics.
+  - `POST /v1/ideas/generate`: Synthesize grounded `IdeaCard`s from brief and constraints.
+  - `POST /v1/ideas/import`: Bulk JSON/CSV import for restricted sites.
+  - `GET /v1/sources/coverage`: Audited status of all 21 source policies.
+  - `POST /v1/crawl/runs` & `GET /v1/crawl/runs/{id}`: Trigger and monitor crawler runs.
+- **Gradio Visualizer Tabs**:
+  - **Crawl Monitor**: Select adapter and execution mode with real-time status.
+  - **Idea Explorer**: Interactive semantic search with clickable `#:~:text=` text fragment links.
+  - **Trends & Clusters**: Clustering and defensible winner analytics.
+  - **Idea Generator**: Studio for brief input, time-limit calibration, and grounded card generation.
+
+---
+
 ## 📂 Repository Structure & File Map
 
 ```text
@@ -575,3 +642,11 @@ python -m pytest -v
 | `tests/test_phase7_acceptance.py` | 8-point acceptance suite verifying 18 vertical adapters, RRF merge, SimHash dedup, robots.txt/rate-limits/circuit-breakers, exact location excerpts, Chrome fragment URLs, fan-out seen-URL dedup, and tenant isolation. |
 | `tests/test_live_smoke.py` | Live integration smoke suite testing real Groq, Gemini, Tavily, Crawl4AI, and MCP connections. |
 | `tests/test_live_searxng.py` | Live SearXNG query execution, health checks, and engine federation. |
+| `tests/test_phase1_sources.py` | Idea Miner Phase 1: Source policy enforcement, denied domain rejection, 21 domain adapters, loud failure on broken selectors. |
+| `tests/test_phase2_crawler.py` | Idea Miner Phase 2: PostgreSQL crawl frontier, idempotent worker claims, crash resumption, incremental refresh, and raw document store. |
+| `tests/test_phase3_extraction.py` | Idea Miner Phase 3: Verbatim excerpt verification, fabrication rejection, privacy scrubbing, entity resolution, and pgvector hybrid search. |
+| `tests/test_phase4_analysis.py` | Idea Miner Phase 4: Sandboxed clustering (HDBSCAN/KMeans), category win rates, defensible winner vs non-winner features, and whitespace detection. |
+| `tests/test_phase5_generation.py` | Idea Miner Phase 5: Grounded idea generator, 0.80 originality guardrail, past-winner warnings, and Markdown/JSON/CSV/PPTX exports. |
+| `tests/test_phase6_api_ui.py` | Idea Miner Phase 6: REST API endpoints (`/v1/ideas/*`), Gradio visualizer tabs, and Langfuse crawl/extraction cost spans. |
+| `tests/test_phase7_idea_miner_acceptance.py` | Idea Miner Phase 7: 10-point acceptance suite verifying policy, robots.txt, resumable crawl, verified evidence, privacy, 2,000+ project benchmark, and live smoke tests. |
+

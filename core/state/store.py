@@ -248,15 +248,16 @@ class StateStore:
         return note
 
     async def get_notes(self, job_id: str, task_id: Optional[str] = None) -> List[ResearchNote]:
-        async with await self.get_session() as session:
-            stmt = select(ResearchNoteModel).where(
-                ResearchNoteModel.job_id == job_id,
-                ResearchNoteModel.tenant_id == self.tenant_id,
-            )
-            if task_id:
-                stmt = stmt.where(ResearchNoteModel.task_id == task_id)
-            res = await session.execute(stmt)
-            models = res.scalars().all()
+        async with self._task_lock:
+            async with await self.get_session() as session:
+                stmt = select(ResearchNoteModel).where(
+                    ResearchNoteModel.job_id == job_id,
+                    ResearchNoteModel.tenant_id == self.tenant_id,
+                )
+                if task_id:
+                    stmt = stmt.where(ResearchNoteModel.task_id == task_id)
+                res = await session.execute(stmt)
+                models = res.scalars().all()
             return [
                 ResearchNote(
                     id=m.id,
