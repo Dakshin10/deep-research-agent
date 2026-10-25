@@ -1,0 +1,39 @@
+domain: idea_mining
+version: "1.0.0"
+description: "Startup, hackathon, and launch idea mining engine with verified evidence and originality scoring."
+
+extraction:
+  fast_model_role: "researcher"
+  strong_model_role: "writer"
+  max_chunk_tokens: 1500
+  language_detection: true
+  auto_translate: true
+  evidence_verification_strict: true
+
+entity_resolution:
+  link_match_priority: ["github", "demo", "youtube", "website"]
+  name_similarity_threshold: 0.90
+  embedding_similarity_threshold: 0.88
+  allow_unmerge: true
+
+privacy:
+  collect_emails: false
+  collect_phone_numbers: false
+  collect_addresses: false
+  collect_private_handles: false
+  store_team_names_flag: false
+
+analysis:
+  clustering_algorithm: "hdbscan"  # hdbscan | kmeans
+  default_clusters: 8
+  min_cluster_size: 3
+  trend_metrics: ["tech_stack", "domain_tags", "problem_area"]
+  win_rate_min_samples: 5
+
+generation:
+  model_role: "writer"
+  max_cards: 5
+  originality_threshold: 0.80  # Max cosine similarity allowed to existing project (novelty >= 0.20)
+  min_inspirations: 3
+  max_inspirations: 8
+  flag_past_winner_inspirations: true

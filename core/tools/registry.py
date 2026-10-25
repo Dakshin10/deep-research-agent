@@ -185,6 +185,36 @@ class WebIndexDataSource(DataSource):
         return [store.hybrid_search]
 
 
+class HackathonsDataSource(DataSource):
+    name = "hackathons"
+    description = "Hackathon project submissions, winner galleries, and challenges (Devpost, Devfolio, ETHGlobal, etc.)."
+
+    def build_tools(self, tenant_id: str) -> List[Callable]:
+        from core.search.router import SearchRouter
+        router = SearchRouter()
+        return [lambda q: router.search(q, source_family="hackathons")]
+
+
+class StartupsDataSource(DataSource):
+    name = "startups"
+    description = "Startup company directories, early launch posts, and founder announcements (YC, Product Hunt, HN, etc.)."
+
+    def build_tools(self, tenant_id: str) -> List[Callable]:
+        from core.search.router import SearchRouter
+        router = SearchRouter()
+        return [lambda q: router.search(q, source_family="startups")]
+
+
+class WriteupsDataSource(DataSource):
+    name = "writeups"
+    description = "Developer build logs, engineering articles, and startup retrospectives (Dev.to, Hashnode, Medium RSS)."
+
+    def build_tools(self, tenant_id: str) -> List[Callable]:
+        from core.search.router import SearchRouter
+        router = SearchRouter()
+        return [lambda q: router.search(q, source_family="writeups")]
+
+
 class DataSourceRegistry:
     """Central registry of all data sources available in the Deep Researcher."""
 
@@ -212,6 +242,11 @@ class DataSourceRegistry:
         self.register(AppStoresDataSource())
         self.register(ArchivesDataSource())
         self.register(WebIndexDataSource())
+
+        # Idea Miner Source Families
+        self.register(HackathonsDataSource())
+        self.register(StartupsDataSource())
+        self.register(WriteupsDataSource())
 
     def register(self, source: DataSource):
         self._sources[source.name] = source

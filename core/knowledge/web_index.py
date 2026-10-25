@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone, timedelta
 import math
 import os
@@ -72,6 +73,7 @@ class WebIndexStore:
         self.keyword_weight = keyword_weight
         self.embedder = EmbeddingModel()
         self._engine = None
+        self._write_lock = asyncio.Lock()
 
         # Load TTL configs if available
         self.ttl_days = dict(self.DEFAULT_TTL_DAYS)
@@ -164,8 +166,7 @@ class WebIndexStore:
         chunk_ids: List[str] = []
         now = datetime.now(timezone.utc)
 
-        from core.state.store import StateStore
-        async with StateStore._write_lock:
+        async with self._write_lock:
             # 1. Index sections if present
             if doc.sections:
                 async with await self.get_session() as session:
@@ -210,27 +211,27 @@ class WebIndexStore:
                 for text_chunk, c_start, c_end in passages:
                     vec = self.embedder.embed_text(text_chunk)
                     frag_url = generate_text_fragment_url(doc.final_url or doc.url, text_chunk[:100])
-                cid = f"widx_{uuid.uuid4().hex[:8]}"
-                model = WebIndexChunkModel(
-                    id=cid,
-                    tenant_id=self.tenant_id,
-                    url=doc.final_url or doc.url,
-                    canonical_url=canonical,
-                    title=doc.title or "",
-                    source_family=source_family,
-                    passage_text=text_chunk,
-                    char_start=c_start,
-                    char_end=c_end,
-                    heading_path=[],
-                    text_fragment_url=frag_url,
-                    embedding=vec,
-                    created_at=now,
-                    updated_at=now,
-                    is_stale=False,
-                )
-                session.add(model)
-                chunk_ids.append(cid)
-            await session.commit()
+                    cid = f"widx_{uuid.uuid4().hex[:8]}"
+                    model = WebIndexChunkModel(
+                        id=cid,
+                        tenant_id=self.tenant_id,
+                        url=doc.final_url or doc.url,
+                        canonical_url=canonical,
+                        title=doc.title or "",
+                        source_family=source_family,
+                        passage_text=text_chunk,
+                        char_start=c_start,
+                        char_end=c_end,
+                        heading_path=[],
+                        text_fragment_url=frag_url,
+                        embedding=vec,
+                        created_at=now,
+                        updated_at=now,
+                        is_stale=False,
+                    )
+                    session.add(model)
+                    chunk_ids.append(cid)
+                await session.commit()
 
         return chunk_ids
 

@@ -1,0 +1,250 @@
+# Source Crawling & Scraping Policy Configuration
+# Defines allowed sites, access methods, robots.txt compliance, and rate limits.
+# Unknown sites: allowed only through search-engine results with robots.txt obeyed.
+
+default_policy:
+  allowed: false
+  allow_via_search_result: true
+  robots_respected: true
+  rate_limit_rps: 0.5
+  max_pages_per_run: 50
+  notes: "Default for unlisted domains: scraping disallowed; accessible only via verified search engine result hits."
+
+sites:
+  # --------------------------------------------------------------------------
+  # Hackathons
+  # --------------------------------------------------------------------------
+  devpost.com:
+    allowed: true
+    access_method: "html"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 500
+    notes: "Project gallery and winners filter crawl. Checked 2026-10-25"
+
+  devfolio.co:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 1.0
+    max_pages_per_run: 500
+    notes: "Devfolio public project showcase API. Checked 2026-10-25"
+
+  dorahacks.io:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 1.0
+    max_pages_per_run: 500
+    notes: "DoraHacks public hackathons, grants & BUIDL listings. Checked 2026-10-25"
+
+  ethglobal.com:
+    allowed: true
+    access_method: "html"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 300
+    notes: "ETHGlobal showcase gallery. Checked 2026-10-25"
+
+  mlh.io:
+    allowed: true
+    access_method: "sitemap"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 200
+    notes: "Major League Hacking public event lists. Checked 2026-10-25"
+
+  unstop.com:
+    allowed: true
+    access_method: "html"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 300
+    notes: "Unstop hackathons and competition winners. Checked 2026-10-25"
+
+  hack2skill.com:
+    allowed: true
+    access_method: "html"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 200
+    notes: "Hack2skill public challenges. Checked 2026-10-25"
+
+  sih.gov.in:
+    allowed: true
+    access_method: "html"
+    robots_respected: true
+    rate_limit_rps: 0.2
+    max_pages_per_run: 100
+    notes: "Smart India Hackathon public problem statements and winner PDFs. Checked 2026-10-25"
+
+  kaggle.com:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 1.0
+    max_pages_per_run: 500
+    notes: "Kaggle competition listings and winning discussion writeups. Checked 2026-10-25"
+
+  github.com:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 1.5
+    max_pages_per_run: 1000
+    notes: "Official GitHub Search API for repos tagged hackathon/topics with READMEs. Checked 2026-10-25"
+
+  # --------------------------------------------------------------------------
+  # Startups & Launches
+  # --------------------------------------------------------------------------
+  ycombinator.com:
+    allowed: true
+    access_method: "html"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 500
+    notes: "YC public company directory. Checked 2026-10-25"
+
+  producthunt.com:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 1.0
+    max_pages_per_run: 500
+    notes: "Product Hunt official API. Checked 2026-10-25"
+
+  news.ycombinator.com:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 2.0
+    max_pages_per_run: 1000
+    notes: "HN Algolia API for 'Show HN' and 'Launch HN' submissions. Checked 2026-10-25"
+
+  betalist.com:
+    allowed: true
+    access_method: "rss"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 200
+    notes: "BetaList startup launches RSS feed. Checked 2026-10-25"
+
+  indiehackers.com:
+    allowed: true
+    access_method: "html"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 300
+    notes: "Indie Hackers milestone and launch posts. Checked 2026-10-25"
+
+  reddit.com:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 1.0
+    max_pages_per_run: 500
+    notes: "Reddit public API for r/startups, r/SideProject, r/SaaS, r/EntrepreneurRideAlong. Checked 2026-10-25"
+
+  wellfound.com:
+    allowed: false
+    access_method: "html"
+    robots_respected: true
+    rate_limit_rps: 0.0
+    max_pages_per_run: 0
+    notes: "Scraping disallowed by Terms. Manual CSV import only. Checked 2026-10-25"
+
+  # --------------------------------------------------------------------------
+  # Write-ups & Video Transcripts
+  # --------------------------------------------------------------------------
+  dev.to:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 2.0
+    max_pages_per_run: 500
+    notes: "Forem public API for hackathon and startup development write-ups. Checked 2026-10-25"
+
+  hashnode.com:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 1.0
+    max_pages_per_run: 500
+    notes: "Hashnode public GraphQL API for developer blogs and hackathon builds. Checked 2026-10-25"
+
+  medium.com:
+    allowed: true
+    access_method: "rss"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 200
+    notes: "Medium topic and publication RSS feeds. Checked 2026-10-25"
+
+  substack.com:
+    allowed: true
+    access_method: "rss"
+    robots_respected: true
+    rate_limit_rps: 0.5
+    max_pages_per_run: 200
+    notes: "Substack publication RSS feeds for startup analysis. Checked 2026-10-25"
+
+  youtube.com:
+    allowed: true
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 1.0
+    max_pages_per_run: 300
+    notes: "yt-dlp metadata and youtube-transcript-api for demo & pitch videos. Checked 2026-10-25"
+
+  # --------------------------------------------------------------------------
+  # Strictly DENIED Domains
+  # Terms of service strictly forbid scraping. Must refuse crawler access.
+  # Manual CSV/JSON import or official enterprise API required.
+  # --------------------------------------------------------------------------
+  linkedin.com:
+    allowed: false
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 0.0
+    max_pages_per_run: 0
+    notes: "DENIED. Terms forbid scraping. Use official API or manual CSV import. Checked 2026-10-25"
+
+  x.com:
+    allowed: false
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 0.0
+    max_pages_per_run: 0
+    notes: "DENIED. Terms forbid scraping. Use official API or manual CSV import. Checked 2026-10-25"
+
+  twitter.com:
+    allowed: false
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 0.0
+    max_pages_per_run: 0
+    notes: "DENIED. Terms forbid scraping. Use official API or manual CSV import. Checked 2026-10-25"
+
+  facebook.com:
+    allowed: false
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 0.0
+    max_pages_per_run: 0
+    notes: "DENIED. Terms forbid scraping. Use official Meta Graph API or manual CSV import. Checked 2026-10-25"
+
+  instagram.com:
+    allowed: false
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 0.0
+    max_pages_per_run: 0
+    notes: "DENIED. Terms forbid scraping. Use official Meta Graph API or manual CSV import. Checked 2026-10-25"
+
+  crunchbase.com:
+    allowed: false
+    access_method: "api"
+    robots_respected: true
+    rate_limit_rps: 0.0
+    max_pages_per_run: 0
+    notes: "DENIED. Terms forbid scraping. Use Crunchbase Enterprise API or manual CSV import. Checked 2026-10-25"

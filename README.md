@@ -7,7 +7,10 @@ The service is strictly grounded in three distinct knowledge tiers:
 2. **Connected Enterprise Systems**: Read-only Model Context Protocol (MCP) clients with strict allowlists for Google Analytics 4 (GA4) and HubSpot CRM.
 3. **Per-Tenant Knowledge Base**: Hybrid dense (`pgvector` cosine similarity) and sparse keyword retrieval over uploaded client documents (PDF, DOCX, TXT) with PostgreSQL Row-Level Security (RLS) and shared global benchmarks.
 
-> **Default Domain Profile**: **Marketing Agency** (competitor teardowns, campaign briefs, performance audits, and paid media KPI computations). All domain behaviors reside in configuration files (`config/`) and modular skills (`skills/`), ensuring core agent logic remains domain-agnostic.
+> **Supported Domain Profiles**:
+> 1. **Marketing Agency** (`config/domains/marketing.yaml`): Competitor teardowns, campaign briefs, performance audits, and paid media KPI computations.
+> 2. **Idea Miner** (`config/domains/idea_mining.yaml`): Continuous crawling and structuring of hackathon projects/winners, startup launches, and developer writeups with verified location evidence, semantic clustering, whitespace gap analysis, and grounded idea generation.
+> All domain behaviors reside in configuration files (`config/`) and modular skills (`skills/`), ensuring core agent logic remains domain-agnostic via request parameter `{"domain": "idea_mining"}`.
 
 ---
 

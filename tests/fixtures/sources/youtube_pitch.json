@@ -1,0 +1,9 @@
+{
+  "id": "v91kLq02aZ",
+  "title": "AetherOS: Autonomous Local AI Operating System Demo (HackMIT Winner)",
+  "uploader": "AetherOS Team",
+  "webpage_url": "https://www.youtube.com/watch?v=v91kLq02aZ",
+  "description": "Pitch and live demo of AetherOS at HackMIT 2026. Built with Rust, WASM, and Llama 3.",
+  "transcript_text": "Good afternoon judges. Today we are presenting AetherOS. Operating systems were built before AI existed. We reimagined the file system as an autonomous semantic memory layer.",
+  "tags": ["AI", "Rust", "HackMIT", "Operating System"]
+}

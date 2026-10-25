@@ -529,3 +529,29 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
 - Interleaved `QueryExpander` subqueries across source families in round-robin fashion so early query caps guarantee representation across >= 4 source families (`web_general`, `forums`, `code`, `academic`, `news`, `video`, `social`).
 
 
+---
+
+## 18. Idea Miner Phase 1 Decisions: Source Policy & Source Adapters
+
+### 18.1 Domain Configuration & Skill (`config/domains/idea_mining.yaml` & `skills/idea_mining/SKILL.md`)
+- Kept the core agent architecture strictly domain-agnostic by establishing domain profile `idea_mining` activated via request parameter `{"domain": "idea_mining"}`.
+- Configured models, temperature, extraction chunk size, entity resolution similarity thresholds (name similarity 0.88, embedding cosine similarity 0.85), privacy defaults (team attribution off by default, emails/phones scrubbed), and novelty guardrail threshold (0.80).
+- Documented operational workflow, location verification rules, and privacy compliance in `skills/idea_mining/SKILL.md`.
+
+### 18.2 Strict Source Policy Engine (`config/source_policy.yaml` & `core/sources/policy.py`)
+- Created `config/source_policy.yaml` recording domain permissions, access methods (`api`, `rss`, `sitemap`, `html`), robots.txt compliance (`true`), rate limits (req/sec), max pages per run, and date checked (2026-10-25).
+- **Default for unknown sites**: Allowed only via search-engine results, adhering strictly to robots.txt.
+- **Explicitly Denied Domains**: `linkedin.com`, `x.com`, `twitter.com`, `facebook.com`, `instagram.com`, `crunchbase.com` and sites forbidding crawling in their terms. Crawler will refuse any domain not marked allowed or flagged denied. Manual CSV/JSON import hooks provided for denied domains.
+- Implemented CLI `python -m core.sources.policy check <domain>` to fetch and verify robots.txt policy and allowed access paths.
+
+### 18.3 Source Adapters (`core/sources/adapters/`)
+- Implemented 21 specialized adapters extending `SourceAdapter`:
+  - **Hackathons**: Devpost, Devfolio, DoraHacks, ETHGlobal, MLH, Unstop, Hack2skill, Smart India Hackathon (SIH), Kaggle, GitHub Hackathons.
+  - **Startups & Launches**: Y Combinator Public Directory, Product Hunt API, Hacker News Launches (Algolia API), BetaList, Indie Hackers, Reddit Startups.
+  - **Writeups & Media**: Dev.to, Hashnode, RSS Writeups (Medium/Substack), YouTube Pitch Videos (yt-dlp + transcript API), PDF Pitch Decks / Reports (PyMuPDF).
+- Implemented loud failure: If a site markup or API structure changes, adapters raise `AdapterBrokenError` with a clear message and emit an `adapter_broken` event; adapters never silently return empty results.
+- Added recorded offline fixtures in `tests/fixtures/sources/` for robust offline test verification.
+
+### 18.4 Router & Registry Integration
+- Mapped source families `hackathons`, `startups`, `launches`, `writeups` into `core/search/router.py`.
+- Registered `HackathonsDataSource`, `StartupsDataSource`, and `WriteupsDataSource` in `core/tools/registry.py`.

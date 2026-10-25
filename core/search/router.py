@@ -69,6 +69,14 @@ class SearchRouter:
         self._providers["tavily"] = TavilySearchAdapter()
         self._providers["exa"] = ExaSearchAdapter()
 
+        # Register Idea Miner Source Adapters
+        try:
+            from core.sources.registry import SourceAdapterRegistry
+            for adapter in SourceAdapterRegistry().list_adapters():
+                self._providers[adapter.name] = adapter
+        except Exception:
+            pass
+
         # Map source_family -> provider names
         self._family_map = {
             "web_general": ["searxng", "duckduckgo"],
@@ -81,6 +89,10 @@ class SearchRouter:
             "app_stores": ["apple_app_store", "google_play"],
             "archives": ["wayback_cdx", "marginalia"],
             "web_index": ["web_index"],
+            "hackathons": ["devpost", "devfolio", "dorahacks", "ethglobal", "mlh", "unstop", "hack2skill", "sih", "kaggle", "github_hackathon"],
+            "startups": ["yc", "producthunt", "hn_launches", "betalist", "indiehackers", "reddit_startups"],
+            "launches": ["producthunt", "hn_launches", "betalist"],
+            "writeups": ["devto", "hashnode", "rss_writeups"],
         }
 
     def register_provider(self, name: str, provider: SearchProvider):

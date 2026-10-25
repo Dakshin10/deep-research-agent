@@ -1,0 +1,22 @@
+{
+  "slug": "neuro-mesh-6a1b",
+  "name": "NeuroMesh",
+  "tagline": "Decentralized federated learning mesh for private clinical trials",
+  "description": "NeuroMesh allows hospitals to train on-premise vision models without moving patient data.",
+  "is_winner": true,
+  "prize_name": "Healthcare Track Gold Winner",
+  "hackathon": {
+    "name": "ETHIndia 2026"
+  },
+  "team_members": [
+    {"name": "David Kumar"},
+    {"name": "Elena Rostova"},
+    {"name": "Marcus Vance"}
+  ],
+  "tags": ["healthcare", "federated-learning", "privacy"],
+  "tech_stack": ["PyTorch", "Rust", "Libp2p", "Postgres"],
+  "links": {
+    "repo": "https://github.com/neuromesh/protocol",
+    "demo": "https://neuromesh.network"
+  }
+}

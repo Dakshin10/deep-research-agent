@@ -1,0 +1,13 @@
+{
+  "hits": [
+    {
+      "objectID": "39948210",
+      "title": "Show HN: GitTrace – Real-time distributed tracing embedded in git commits",
+      "url": "https://gittrace.dev",
+      "author": "devguru",
+      "points": 342,
+      "num_comments": 88,
+      "story_text": "Hey HN! We built GitTrace because microservice telemetry should be reproducible from git history. It injects OpenTelemetry spans into git tree metadata."
+    }
+  ]
+}
