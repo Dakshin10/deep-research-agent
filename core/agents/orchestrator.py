@@ -108,8 +108,9 @@ class ResearchOrchestrator:
 
             # 2. Expand tasks into sharded sub-queries
             task_shards: List[tuple[PlanTask, SubQuery]] = []
+            max_q = 6 if self.concurrency_cap <= 4 else 10
             for t in ready_tasks:
-                sub_queries = await self.query_expander.expand(t, brief=brief, max_queries=8)
+                sub_queries = await self.query_expander.expand(t, brief=brief, max_queries=max_q)
                 for sq in sub_queries:
                     task_shards.append((t, sq))
 
@@ -130,17 +131,11 @@ class ResearchOrchestrator:
                 except Exception:
                     pass
 
-            # 3. Execute shards in parallel using asyncio.TaskGroup under concurrency limits
-            try:
-                async with asyncio.TaskGroup() as tg:
-                    for idx, (t, sq) in enumerate(task_shards):
-                        tg.create_task(_run_shard(t, sq, idx))
-            except Exception:
-                # Fallback to asyncio.gather if any shard raises an unhandled exception
-                results = await asyncio.gather(
-                    *[_run_shard(t, sq, idx) for idx, (t, sq) in enumerate(task_shards)],
-                    return_exceptions=True,
-                )
+            # 3. Execute shards in parallel under concurrency limits
+            await asyncio.gather(
+                *[_run_shard(t, sq, idx) for idx, (t, sq) in enumerate(task_shards)],
+                return_exceptions=True,
+            )
 
             # 4. If KB lookup is available, run for ready tasks
             if self.knowledge_store:

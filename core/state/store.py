@@ -38,12 +38,6 @@ from core.state.schemas import (
 class StateStore:
     """Thread-safe, multi-tenant state store managing jobs, notes, artifacts, and event streaming."""
 
-    # In-memory broadcast queues for SSE clients keyed by job_id
-    _subscribers: Dict[str, List[asyncio.Queue]] = defaultdict(list)
-    _lock = asyncio.Lock()
-    _write_lock = asyncio.Lock()
-    _task_lock = _write_lock
-
     def __init__(
         self,
         tenant_id: str,
@@ -54,6 +48,14 @@ class StateStore:
         self.db_url = db_url
         self._session_factory = session_factory
         self._engine = None
+
+        # Instance-level locks & queues tied to current event loop
+        self._subscribers: Dict[str, List[asyncio.Queue]] = defaultdict(list)
+        self._lock = asyncio.Lock()
+        self._write_lock = asyncio.Lock()
+        self._task_lock = self._write_lock
+        self._seen_lock = asyncio.Lock()
+        self._seen_urls: Dict[str, set[str]] = defaultdict(set)
 
     async def init_db(self):
         """Initialize database schema if not already initialized."""
@@ -476,8 +478,6 @@ class StateStore:
     # ---------------------------------------------------------
     # Shared Seen URLs Tracking (Per Job)
     # ---------------------------------------------------------
-    _seen_urls: Dict[str, set[str]] = defaultdict(set)
-    _seen_lock = asyncio.Lock()
 
     async def is_url_seen(self, job_id: str, canonical_url: str) -> bool:
         """Check if a canonical URL has already been fetched by any shard in this job."""

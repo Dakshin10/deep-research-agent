@@ -506,3 +506,26 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
 - Fixed SQLite single-writer race conditions across `StateStore` and `WebIndexStore` by introducing a class-level `_write_lock` that synchronizes all database write sessions (`create_job`, `update_job`, `add_note`, `add_artifact`, `index_note_passage`).
 - Replaced `cascade="all, delete-orphan"` with `cascade="all, delete"` on `JobModel.notes`, `JobModel.artifacts`, and `JobModel.events` to prevent independent notes from being marked as orphans when `update_job` executes.
 
+---
+
+## 17. Phase 7 Decisions: Acceptance Test Suite and Live Verification
+
+### 17.1 Acceptance Test Coverage (`tests/test_phase7_acceptance.py`)
+- Authored 8 comprehensive acceptance test scenarios validating all v1 engine requirements:
+  1. `test_provider_adapters_offline_fixtures`: Validates 18 vertical adapters (Hacker News, Reddit, GitHub, arXiv, Wikipedia, YouTube, Mastodon/Bluesky, App Store/Google Play, Wayback, Common Crawl, etc.) using offline recorded HTML/JSON fixtures. Upstream errors are gracefully handled without raising.
+  2. `test_rrf_canonicalization_and_simhash_dedup`: Verifies Reciprocal Rank Fusion, canonical URL parameter stripping (`utm_*`, `fbclid`, `gclid`), and SimHash 64-bit Hamming-distance text deduplication (< 3 distance considered duplicate).
+  3. `test_robots_rate_limiter_and_circuit_breaker`: Verifies RFC 9309 robots.txt compliance, token-bucket domain rate limits, and circuit breakers (trips to open state on 3 consecutive 5xx/429 responses, rejecting new requests immediately).
+  4. `test_excerpt_verification_locations_and_fabrication_rejection`: Enforces the HARD RULE that fabricated claims are rejected and valid excerpts extract exact `char_start`, `char_end`, PDF `page_no`, and heading hierarchy.
+  5. `test_chrome_text_fragment_url_rfc_encoding`: Verifies Chrome Scroll-to-Text fragment encoding (`#:~:text=[prefix-,]start[,end][,-suffix]`) with RFC 3986 percent encoding for commas, dashes, and whitespace.
+  6. `test_fanout_concurrency_seen_urls_and_budget_clean_stop`: Verifies atomic seen-URL dedup preventing duplicate fetches, and clean stop when step/token budget is exhausted.
+  7. `test_tenant_isolation_web_index_chunks`: Verifies multi-tenant isolation in `WebIndexStore` ensuring zero cross-tenant passage retrieval leakage.
+  8. `test_end_to_end_acceptance_sample_marketing_query`: Runs an end-to-end deep research job across >= 20 parallel shards on a complex marketing query; verifies 100% of cited claims have verified location and citations pass CitationGate.
+
+### 17.2 Live SearXNG Smoke Test (`tests/test_live_searxng.py`)
+- Added `@pytest.mark.live` smoke test for SearXNG instance verifying live HTTP query execution, response parsing, and latency tracking.
+
+### 17.3 Event Loop and Async Concurrency Fix
+- Moved `StateStore._seen_lock`, `_write_lock`, and `_seen_urls` to instance-level initialization inside `StateStore.__init__` to avoid cross-event-loop `RuntimeError` during asynchronous test suite execution.
+- Interleaved `QueryExpander` subqueries across source families in round-robin fashion so early query caps guarantee representation across >= 4 source families (`web_general`, `forums`, `code`, `academic`, `news`, `video`, `social`).
+
+

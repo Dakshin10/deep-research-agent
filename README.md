@@ -569,4 +569,6 @@ python -m pytest -v
 | `tests/test_pptx_compliance_mcp.py` | PowerPoint layout rules (max 5 bullets, zero empty placeholders), compliance gate violations, and read-only MCP allowlisting. |
 | `tests/test_budgets_security_evals.py` | 80% warning & 100% clean stop budget limits, prompt injection defenses, and offline evaluation suite. |
 | `tests/test_end_to_end_pipeline.py` | Complete end-to-end integration test: vague request -> clarify -> plan -> parallel research -> CSV analysis -> synthesis -> quality gates -> MinIO artifact upload. |
+| `tests/test_phase7_acceptance.py` | 8-point acceptance suite verifying 18 vertical adapters, RRF merge, SimHash dedup, robots.txt/rate-limits/circuit-breakers, exact location excerpts, Chrome fragment URLs, fan-out seen-URL dedup, and tenant isolation. |
 | `tests/test_live_smoke.py` | Live integration smoke suite testing real Groq, Gemini, Tavily, Crawl4AI, and MCP connections. |
+| `tests/test_live_searxng.py` | Live SearXNG query execution, health checks, and engine federation. |
