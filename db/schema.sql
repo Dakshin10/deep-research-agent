@@ -42,6 +42,23 @@ ALTER TABLE research_notes ENABLE ROW LEVEL SECURITY;
 CREATE POLICY notes_tenant_isolation ON research_notes
     USING (tenant_id = current_setting('app.tenant_id', true));
 
+-- Research Notes Phase 3 Location Columns Migration
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS url TEXT;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS canonical_url TEXT;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS source_family VARCHAR(64);
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS provider VARCHAR(64);
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS retrieved_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64);
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS char_start INT;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS char_end INT;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS page_no INT;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS heading_path JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS text_fragment_url TEXT;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS video_timestamp_url TEXT;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS archive_url TEXT;
+ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+
 -- 3. Artifacts Table
 CREATE TABLE IF NOT EXISTS artifacts (
     id VARCHAR(64) PRIMARY KEY,

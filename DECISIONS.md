@@ -356,3 +356,31 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
 - Created `tests/test_fetch_layer.py` with 8 comprehensive unit and integration tests (robots.txt parsing, token bucket, circuit breaker, heading offsets, PDF pages, DOCX sections, tenant isolation cache, and blocked fetcher with prompt injection defense).
 - Full test suite execution: **29 passed in 66.13s** with zero failures.
 
+---
+
+## 13. Phase 3 Decisions: Evidence with Exact Locations
+
+### 13.1 ResearchNote Schema & DB Migration
+- Extended `ResearchNote` in `core/state/schemas.py` and `ResearchNoteModel` in `core/state/models.py` with backward-compatible nullable location attributes:
+  `url`, `canonical_url`, `title`, `source_family`, `provider`, `retrieved_at`, `content_hash`, `char_start`, `char_end`, `page_no`, `heading_path`, `text_fragment_url`, `video_timestamp_url`, `archive_url`, `is_verified`.
+- Added migration DDL in `db/schema.sql` (`ALTER TABLE research_notes ADD COLUMN IF NOT EXISTS ...`) and safe SQLite auto-migration in `core/state/store.py` (`init_db`).
+
+### 13.2 Exact & Fuzzy Excerpt Verification (HARD RULE)
+- Implemented `verify_excerpt_in_document` in `core/fetch/location.py`:
+  - Performs an exact substring search within `doc.raw_text`.
+  - Fallback to NFKC and collapsed whitespace normalization with `SequenceMatcher` similarity >= 0.90.
+  - Automatically identifies PDF page number (`page_no`) and hierarchical heading path (`heading_path`) for the matched character span `[char_start, char_end]`.
+  - Enforced in `ResearcherWorker._verify_and_save_note`: If an excerpt cannot be verified in the document text, the worker **drops the note immediately** and emits a `note_rejected` event. No unverified web citations are ever saved.
+
+### 13.3 W3C / Chrome Scroll-to-Text Fragments
+- Implemented `generate_text_fragment_url` in `core/fetch/location.py`: generates `#:~:text=[startText][,endText]` URLs with percent-encoded boundary terms, enabling 1-click navigation directly to highlighted excerpts inside browsers.
+
+### 13.4 Writer Citation Rendering & Citation Gate Enforcement
+- Extended `WriterAgent` to format citations with human-readable locations:
+  e.g. `[note_ab12] https://site/page - section 'Pricing > Enterprise SLA' (offsets 120-180) [View Excerpt](text_fragment_url)`.
+- Updated `CitationGate` to verify that every numeric, comparative, or superlative claim links to a note with a verified location.
+
+### 13.5 Test Verification
+- Created `tests/test_evidence_locations.py` with 6 comprehensive unit and integration tests (exact match, fuzzy match, fabricated excerpt rejection and event emission, PDF page resolution, text-fragment URL generation, CitationGate location enforcement, and Writer report rendering).
+- Full test suite execution: **35 passed in 80.95s** with zero failures.
+

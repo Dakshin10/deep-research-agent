@@ -78,6 +78,23 @@ class ResearchNote(BaseModel):
     task_id: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Phase 3 Exact Location Fields
+    url: Optional[str] = None
+    canonical_url: Optional[str] = None
+    title: Optional[str] = None
+    source_family: Optional[str] = None
+    provider: Optional[str] = None
+    retrieved_at: Optional[datetime] = None
+    content_hash: Optional[str] = None
+    char_start: Optional[int] = None
+    char_end: Optional[int] = None
+    page_no: Optional[int] = None
+    heading_path: List[str] = Field(default_factory=list)
+    text_fragment_url: Optional[str] = None
+    video_timestamp_url: Optional[str] = None
+    archive_url: Optional[str] = None
+    is_verified: bool = False
+
 
 class Artifact(BaseModel):
     id: str = Field(default_factory=lambda: f"art_{uuid.uuid4().hex[:8]}")
@@ -95,6 +112,14 @@ class EventType(str, Enum):
     STAGE_STARTED = "stage_started"
     TOOL_CALL = "tool_call"
     NOTE_ADDED = "note_added"
+    NOTE_REJECTED = "note_rejected"
+    SEARCH_STARTED = "search_started"
+    SEARCH_HIT = "search_hit"
+    PAGE_FETCHED = "page_fetched"
+    PAGE_BLOCKED = "page_blocked"
+    SHARD_STARTED = "shard_started"
+    SHARD_DONE = "shard_done"
+    SOURCE_COVERAGE = "source_coverage"
     CLARIFICATION_NEEDED = "clarification_needed"
     ARTIFACT_READY = "artifact_ready"
     BUDGET_WARNING = "budget_warning"

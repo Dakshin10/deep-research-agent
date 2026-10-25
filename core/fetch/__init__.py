@@ -19,6 +19,10 @@ from core.fetch.politeness import (
     TokenBucketRateLimiter,
     backoff_with_jitter,
 )
+from core.fetch.location import (
+    generate_text_fragment_url,
+    verify_excerpt_in_document,
+)
 from core.fetch.tiered_fetcher import TieredFetcher
 
 __all__ = [
@@ -37,4 +41,6 @@ __all__ = [
     "extract_from_pdf",
     "extract_from_docx",
     "extract_from_text",
+    "generate_text_fragment_url",
+    "verify_excerpt_in_document",
 ]

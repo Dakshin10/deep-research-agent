@@ -106,14 +106,34 @@ class WriterAgent:
         ])
 
         for n in notes:
-            ref = n.source_url or n.document_id or "Internal KB"
+            ref = n.text_fragment_url or n.source_url or n.document_id or "Internal KB"
             type_label = f"{n.source_type.upper()} [SIMULATED FALLBACK]" if n.source_type == "fallback" else n.source_type.upper()
-            lines.append(f"- **[{n.id}]** ({type_label}): {n.excerpt[:120]}... [Reference: {ref}]")
+
+            # Format human-readable location
+            location_parts = []
+            if n.heading_path:
+                heading_str = ' > '.join(n.heading_path)
+                location_parts.append(f"section '{heading_str}'")
+            if n.page_no:
+                location_parts.append(f"p. {n.page_no} of PDF")
+            if n.char_start is not None and n.char_end is not None:
+                location_parts.append(f"offsets {n.char_start}-{n.char_end}")
+
+            location_desc = f" - {', '.join(location_parts)}" if location_parts else ""
+            lines.append(
+                f"- **[{n.id}]** ({type_label}) {n.url or n.source_url or ref}{location_desc} [View Excerpt]({ref}): \"{n.excerpt[:140].strip()}\""
+            )
 
         full_draft = "\n".join(lines)
 
+        # Build location verification lookup for CitationGate
+        note_locations = {
+            n.id: bool(n.is_verified or n.char_start is not None or n.heading_path or n.page_no or n.source_type in ("kb", "computed"))
+            for n in notes
+        }
+
         # Run through strict CitationGate
-        gate = CitationGate(valid_note_ids=valid_note_ids, strict=True)
+        gate = CitationGate(valid_note_ids=valid_note_ids, note_locations=note_locations, strict=True)
         gate_res = gate.evaluate(full_draft)
         final_report = gate_res.cleaned_text if not gate_res.passed else full_draft
 

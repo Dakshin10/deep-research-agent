@@ -44,6 +44,23 @@ class ResearchNoteModel(Base):
     task_id = Column(String(64), nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+    # Phase 3 Location Fields
+    url = Column(Text, nullable=True)
+    canonical_url = Column(Text, nullable=True)
+    title = Column(Text, nullable=True)
+    source_family = Column(String(64), nullable=True)
+    provider = Column(String(64), nullable=True)
+    retrieved_at = Column(DateTime, nullable=True)
+    content_hash = Column(String(64), nullable=True)
+    char_start = Column(Integer, nullable=True)
+    char_end = Column(Integer, nullable=True)
+    page_no = Column(Integer, nullable=True)
+    heading_path = Column(JSON, default=list)
+    text_fragment_url = Column(Text, nullable=True)
+    video_timestamp_url = Column(Text, nullable=True)
+    archive_url = Column(Text, nullable=True)
+    is_verified = Column(Boolean, default=False)
+
     job = relationship("JobModel", back_populates="notes")
 
 

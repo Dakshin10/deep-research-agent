@@ -19,7 +19,7 @@ class CitationGateResult(BaseModel):
 
 
 class CitationGate:
-    """Verifies that every numeric, comparative, or superlative claim links to a valid research note ID."""
+    """Verifies that every numeric, comparative, or superlative claim links to a valid research note ID with verified location."""
 
     NUMERIC_PATTERN = re.compile(r"(\b\d+(?:\.\d+)?%|\$\d+(?:\.\d+)?|\b\d+(?:x|\s*fold)\b|\b\d{2,}\b)")
     SUPERLATIVE_COMPARATIVE_PATTERN = re.compile(
@@ -27,8 +27,14 @@ class CitationGate:
     )
     NOTE_CITATION_PATTERN = re.compile(r"\[(note_[a-zA-Z0-9_-]+)\]")
 
-    def __init__(self, valid_note_ids: Set[str] = None, strict: bool = False):
+    def __init__(
+        self,
+        valid_note_ids: Optional[Set[str]] = None,
+        note_locations: Optional[Dict[str, bool]] = None,
+        strict: bool = False,
+    ):
         self.valid_note_ids = valid_note_ids or set()
+        self.note_locations = note_locations or {}
         self.strict = strict
 
     def evaluate(self, text: str) -> CitationGateResult:
@@ -47,24 +53,33 @@ class CitationGate:
 
             # Check for note citations in this sentence
             citations = self.NOTE_CITATION_PATTERN.findall(stripped)
-            # Verify if cited note IDs exist in valid_note_ids
+            # Verify if cited note IDs exist in valid_note_ids and have verified locations
             has_valid_citation = False
+            has_verified_location = False
             for cite in citations:
                 if not self.valid_note_ids or cite in self.valid_note_ids:
                     has_valid_citation = True
                     valid_found.append(cite)
+                    # If note_locations mapping is provided, check if location is verified
+                    if not self.note_locations or self.note_locations.get(cite, False):
+                        has_verified_location = True
 
             # Check if sentence makes numeric or superlative/comparative claim
             is_numeric = bool(self.NUMERIC_PATTERN.search(stripped))
             is_superlative = bool(self.SUPERLATIVE_COMPARATIVE_PATTERN.search(stripped))
 
-            if (is_numeric or is_superlative) and not has_valid_citation:
+            if (is_numeric or is_superlative) and (not has_valid_citation or not has_verified_location):
                 issue_type = "numeric" if is_numeric else "superlative/comparative"
+                reason = (
+                    "Claim contains quantitative assertion but cited note lacks a verified document location."
+                    if has_valid_citation and not has_verified_location
+                    else "Claim contains quantitative or comparative assertion without a verified note ID citation."
+                )
                 flagged.append(
                     CitationIssue(
                         sentence=stripped,
                         issue_type=issue_type,
-                        reason="Claim contains quantitative or comparative assertion without a verified note ID citation.",
+                        reason=reason,
                     )
                 )
                 if self.strict:

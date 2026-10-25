@@ -59,6 +59,29 @@ class StateStore:
             self._engine = create_async_engine(self.db_url, echo=False)
             async with self._engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                # Auto-migrate SQLite schema for missing columns if table pre-existed
+                if "sqlite" in self.db_url:
+                    for col, col_type in [
+                        ("url", "TEXT"),
+                        ("canonical_url", "TEXT"),
+                        ("title", "TEXT"),
+                        ("source_family", "VARCHAR(64)"),
+                        ("provider", "VARCHAR(64)"),
+                        ("retrieved_at", "DATETIME"),
+                        ("content_hash", "VARCHAR(64)"),
+                        ("char_start", "INTEGER"),
+                        ("char_end", "INTEGER"),
+                        ("page_no", "INTEGER"),
+                        ("heading_path", "JSON"),
+                        ("text_fragment_url", "TEXT"),
+                        ("video_timestamp_url", "TEXT"),
+                        ("archive_url", "TEXT"),
+                        ("is_verified", "BOOLEAN DEFAULT 0"),
+                    ]:
+                        try:
+                            await conn.execute(text(f"ALTER TABLE research_notes ADD COLUMN {col} {col_type}"))
+                        except Exception:
+                            pass
             self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
 
     async def get_session(self) -> AsyncSession:
@@ -173,6 +196,21 @@ class StateStore:
                     confidence=note.confidence,
                     task_id=note.task_id,
                     created_at=note.created_at,
+                    url=note.url,
+                    canonical_url=note.canonical_url,
+                    title=note.title,
+                    source_family=note.source_family,
+                    provider=note.provider,
+                    retrieved_at=note.retrieved_at,
+                    content_hash=note.content_hash,
+                    char_start=note.char_start,
+                    char_end=note.char_end,
+                    page_no=note.page_no,
+                    heading_path=note.heading_path,
+                    text_fragment_url=note.text_fragment_url,
+                    video_timestamp_url=note.video_timestamp_url,
+                    archive_url=note.archive_url,
+                    is_verified=note.is_verified,
                 )
                 session.add(model)
                 await session.commit()
@@ -186,6 +224,14 @@ class StateStore:
                 "claim": note.claim,
                 "source_type": note.source_type,
                 "source_url": note.source_url,
+                "location": {
+                    "page_no": note.page_no,
+                    "heading_path": note.heading_path,
+                    "char_start": note.char_start,
+                    "char_end": note.char_end,
+                    "text_fragment_url": note.text_fragment_url,
+                },
+                "is_verified": note.is_verified,
             },
         )
         return note
@@ -213,6 +259,21 @@ class StateStore:
                     confidence=m.confidence,
                     task_id=m.task_id,
                     created_at=m.created_at,
+                    url=m.url,
+                    canonical_url=m.canonical_url,
+                    title=m.title,
+                    source_family=m.source_family,
+                    provider=m.provider,
+                    retrieved_at=m.retrieved_at,
+                    content_hash=m.content_hash,
+                    char_start=m.char_start,
+                    char_end=m.char_end,
+                    page_no=m.page_no,
+                    heading_path=m.heading_path or [],
+                    text_fragment_url=m.text_fragment_url,
+                    video_timestamp_url=m.video_timestamp_url,
+                    archive_url=m.archive_url,
+                    is_verified=bool(m.is_verified),
                 )
                 for m in models
             ]
