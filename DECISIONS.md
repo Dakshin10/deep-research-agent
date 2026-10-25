@@ -588,3 +588,37 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
 - CLI tool: `python -m core.crawl run --source devpost --since 2022 --limit 5000`.
 - API endpoints: `POST /v1/crawl/runs`, `GET /v1/crawl/runs/{id}`, `GET /v1/crawl/runs/{id}/events` (Server-Sent Events), `GET /v1/crawl/runs`.
 - SSE events: `crawl_started`, `page_fetched`, `page_blocked`, `page_skipped`, `adapter_broken`, `crawl_completed`.
+
+---
+
+## 20. Idea Miner Phase 3 Decisions: Structured Idea Extraction with Verified Evidence
+
+### 20.1 IdeaRecord & Evidence Schema (`db/schema_ideas.sql` & `core/ideas/schemas.py`)
+- Created `IdeaRecord` schema capturing: `id`, `name`, `one_liner`, `problem`, `solution`, `target_users`, `domain_tags`, `tech_stack`, `business_model`, `stage` (`idea`, `prototype`, `launched`, `funded`), `traction`, `source_kind`, `event_name`, `year`, `placement` (`winner`, `runner_up`, `track_prize`, `finalist`, `none`), `team_size` (number only), `links` (`demo`, `repo`, `video`, `website`, `deck`), `first_seen_url`, `all_source_urls`, `confidence`, `evidence`, `embedding` (vector(384)), `merged_into_id`, `merge_history`.
+- Enforced PostgreSQL Row-Level Security (`ALTER TABLE idea_records ENABLE ROW LEVEL SECURITY;`): public records (`tenant_id IS NULL`) are globally discoverable across tenants, while private ideas (`tenant_id = current_setting('app.tenant_id', true)`) remain strictly isolated with zero leakage.
+
+### 20.2 Verbatim Evidence Verification (HARD RULE) & Hallucination Defense (`core/ideas/extractor.py`)
+- Every extracted field claim must be backed by an `EvidenceEntry` linking to an exact verbatim excerpt (`<= 200 chars`).
+- `IdeaExtractor` validates each excerpt against `doc.raw_text` using `verify_excerpt_in_document`:
+  - Verified matches resolve exact character offsets `[char_start, char_end]`, PDF `page_no`, and Chrome `text_fragment_url` (`#:~:text=`).
+  - If verification fails or excerpt is missing: **the field is immediately dropped (set to null/none)** and a `field_rejected` event is emitted.
+  - Fabricated placements, prizes, or traction claims are never stored under any circumstances.
+
+### 20.3 Privacy Guardrails & PII Scrubbing (`core/ideas/privacy.py`)
+- Implemented `PrivacyScrubber` that strips emails, telephone numbers, and residential addresses from all extracted text.
+- Restricted links strictly to public project artifacts (`demo`, `repo`, `video`, `website`, `deck`, `presentation`, `paper`), dropping personal profiles (Facebook, Instagram, LinkedIn personal pages).
+- Individual developer names are suppressed by default unless `privacy.store_individual_names` is explicitly enabled in config. Team size is stored strictly as a numeric count.
+
+### 20.4 Entity Resolution with Audit Trail & Lossless Un-Merge (`core/ideas/resolver.py`)
+- Implemented `EntityResolver` matching projects across disparate sources (Devpost, GitHub, YouTube, Product Hunt, blogs):
+  1. Shared public repository URL (e.g. `github.com/...`) -> immediate match.
+  2. Shared demo/website URL or direct cross-link.
+  3. Normalized title sequence similarity >= 0.88 AND dense vector cosine similarity >= 0.85.
+- Merging combines `all_source_urls`, links, tech stack, domain tags, and retains all verified evidence.
+- Full audit snapshot stored in `surviving.merge_history`; `unmerge(merged_id)` losslessly restores the absorbed record to its pre-merge state.
+
+### 20.5 Hybrid Vector & Full-Text Store (`core/ideas/store.py`)
+- Implemented `IdeaStore` providing hybrid retrieval:
+  - Dense cosine similarity over canonical text embeddings (`Project: ...\nProblem: ...\nSolution: ...\nTech Stack: ...`).
+  - Lexical keyword overlap with support for 2-letter tokens (`AI`, `ML`, `Go`, `VR`, `AR`).
+  - Metadata filtering by `year`, `event_name`, `placement`, `tech_stack`, `domain_tags`.
