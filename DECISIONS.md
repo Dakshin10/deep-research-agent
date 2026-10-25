@@ -327,3 +327,32 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
 - All 7 new search layer tests in `tests/test_search_layer.py` passed 100%.
 - All 21 core scaffold, sandbox, compliance, budgets, and verifier tests passed 100%.
 
+---
+
+## 12. Phase 2 Decisions: Own Fetch & Extract Layer Architecture
+
+### 12.1 Structured FetchedDocument & Exact Offsets
+- Implemented `FetchedDocument` in `core/fetch/base.py` containing: `url`, `final_url`, `status`, `content_type`, `fetched_at`, `content_hash`, `title`, `raw_text`, `sections`, `pages`, `timestamps`, `is_blocked`, and `block_reason`.
+- Extracted sections contain `heading_path` hierarchy (e.g. `["Architecture Overview", "Storage Engine", "Object Store"]`), verbatim section `text`, and exact character boundaries `[char_start, char_end]` indexing into `raw_text`.
+
+### 12.2 Multi-Format Extraction (HTML, PDF, DOCX, Plain Text)
+- **HTML (`core/fetch/extractors.py`)**: Trafilatura for article extraction combined with BeautifulSoup DOM traversal to build hierarchical section paths and exact character offsets.
+- **PDFs**: PyMuPDF (`fitz` / `pymupdf`) extracts per-page text tracking 1-indexed `page_no` with character spans and page sections. Fallback to `pypdf` is preserved.
+- **DOCX**: `python-docx` (`docx.Document`) parses heading levels (`Heading 1`, `Heading 2`, `Heading 3`) and paragraph text, maintaining heading hierarchies.
+- **Plain Text / Markdown**: Regex heading parsing (`#`, `##`) with exact character offsets.
+
+### 12.3 Politeness, Rate Limits, Circuit Breakers & Robots Cache
+- **RobotsCache (`core/fetch/politeness.py`)**: Caches parsed `robots.txt` per host with 24-hour TTL, defaulting to permissive if unreachable (404/timeout).
+- **TokenBucketRateLimiter**: Per-domain token bucket enforcing polite request concurrency (default 3 req/sec, capacity 6).
+- **CircuitBreaker**: Tracks consecutive domain failures; trips after 3 failures into a 60-second cooldown period before allowing a test probe.
+- **Wayback Machine Fallback**: When access is blocked (403, 401, Cloudflare, or robots.txt disallowed), checks the Internet Archive Wayback Machine CDX API (`https://archive.org/wayback/available?url=...`) to retrieve the closest snapshot, preserving research continuity without breaking site terms or rotating fake identities.
+- **Untrusted Data Fencing**: Fences fetched content using `PromptInjectionDefense.fence(...)` with source tagging and injection pattern neutralizations.
+
+### 12.4 Tenant-Scoped Document Caching
+- Added `fetched_documents_cache` table to PostgreSQL (`db/schema.sql`) with RLS policy `USING (tenant_id = current_setting('app.tenant_id', true))` and unique constraint on `(tenant_id, canonical_url, content_hash)`.
+- Implemented `FetchedDocumentCache` in `core/fetch/cache.py` with PostgreSQL persistence and in-memory fallback for local testing.
+
+### 12.5 Test Verification
+- Created `tests/test_fetch_layer.py` with 8 comprehensive unit and integration tests (robots.txt parsing, token bucket, circuit breaker, heading offsets, PDF pages, DOCX sections, tenant isolation cache, and blocked fetcher with prompt injection defense).
+- Full test suite execution: **29 passed in 66.13s** with zero failures.
+

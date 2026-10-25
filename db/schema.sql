@@ -103,3 +103,28 @@ CREATE POLICY chunks_tenant_isolation ON document_chunks
     USING (tenant_id IS NULL OR tenant_id = current_setting('app.tenant_id', true));
 
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
+-- 7. Fetched Documents Cache Table
+CREATE TABLE IF NOT EXISTS fetched_documents_cache (
+    id VARCHAR(64) PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL,
+    canonical_url TEXT NOT NULL,
+    content_hash VARCHAR(64) NOT NULL,
+    final_url TEXT NOT NULL,
+    status INT NOT NULL,
+    content_type VARCHAR(128) NOT NULL,
+    title TEXT,
+    raw_text TEXT NOT NULL,
+    sections_json JSONB DEFAULT '[]'::jsonb,
+    pages_json JSONB DEFAULT '[]'::jsonb,
+    timestamps_json JSONB DEFAULT '[]'::jsonb,
+    fetched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT uq_tenant_url_hash UNIQUE (tenant_id, canonical_url, content_hash)
+);
+
+ALTER TABLE fetched_documents_cache ENABLE ROW LEVEL SECURITY;
+CREATE POLICY fetched_docs_tenant_isolation ON fetched_documents_cache
+    USING (tenant_id = current_setting('app.tenant_id', true));
+
+CREATE INDEX IF NOT EXISTS idx_fetched_docs_lookup ON fetched_documents_cache (tenant_id, canonical_url);
