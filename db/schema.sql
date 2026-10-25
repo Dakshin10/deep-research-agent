@@ -145,3 +145,31 @@ CREATE POLICY fetched_docs_tenant_isolation ON fetched_documents_cache
     USING (tenant_id = current_setting('app.tenant_id', true));
 
 CREATE INDEX IF NOT EXISTS idx_fetched_docs_lookup ON fetched_documents_cache (tenant_id, canonical_url);
+
+-- 8. Tenant-Scoped Web Index Chunks Table (Vector + Full-Text Search)
+CREATE TABLE IF NOT EXISTS web_index_chunks (
+    id VARCHAR(64) PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL,
+    url TEXT NOT NULL,
+    canonical_url TEXT NOT NULL,
+    title TEXT,
+    source_family VARCHAR(32) NOT NULL DEFAULT 'web_general',
+    passage_text TEXT NOT NULL,
+    char_start INT,
+    char_end INT,
+    page_no INT,
+    heading_path JSONB DEFAULT '[]'::jsonb,
+    text_fragment_url TEXT,
+    embedding vector(384),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    is_stale BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+ALTER TABLE web_index_chunks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY web_index_tenant_isolation ON web_index_chunks
+    USING (tenant_id = current_setting('app.tenant_id', true));
+
+CREATE INDEX IF NOT EXISTS idx_web_index_canonical ON web_index_chunks (tenant_id, canonical_url);
+CREATE INDEX IF NOT EXISTS idx_web_index_stale ON web_index_chunks (tenant_id, is_stale);
+CREATE INDEX IF NOT EXISTS idx_web_index_embedding ON web_index_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);

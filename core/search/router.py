@@ -80,7 +80,12 @@ class SearchRouter:
             "social": ["bluesky", "mastodon"],
             "app_stores": ["apple_app_store", "google_play"],
             "archives": ["wayback_cdx", "marginalia"],
+            "web_index": ["web_index"],
         }
+
+    def register_provider(self, name: str, provider: SearchProvider):
+        """Allows dynamic registration of contextual providers like tenant WebIndexProvider."""
+        self._providers[name] = provider
 
     @trace_agent("search_router")
     async def search(

@@ -427,3 +427,46 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
   6. `test_orchestrator_budget_clean_stop`: Verifies clean stop mid-fanout when budget is exhausted.
 - Full test suite passed with 0 regressions.
 
+---
+
+## 15. Phase 5 Decisions: Own Index (Compounding Knowledge)
+
+### 15.1 Tenant-Scoped Web Index Chunks Table (`db/schema.sql` & `core/state/models.py`)
+- Added `web_index_chunks` table storing fetched and verified passages with:
+  `id`, `tenant_id`, `url`, `canonical_url`, `title`, `source_family`, `passage_text`, `char_start`, `char_end`, `page_no`, `heading_path`, `text_fragment_url`, `embedding` (vector(384)), `created_at`, `updated_at`, `is_stale`.
+- Enforces strict PostgreSQL Row-Level Security (`ALTER TABLE web_index_chunks ENABLE ROW LEVEL SECURITY; FORCE ROW LEVEL SECURITY;`) ensuring zero cross-tenant query leakage (`USING (tenant_id = current_setting('app.tenant_id', true))`).
+
+### 15.2 Hybrid Retriever (`core/knowledge/web_index.py`)
+- Implemented `WebIndexStore` providing hybrid retrieval:
+  - Vector cosine similarity via `EmbeddingModel` (dimension 384).
+  - Lexical keyword / BM25 token overlap.
+  - Linear combination: `score = (vector_weight * vec_sim) + (keyword_weight * kw_score)`.
+  - Configurable weights in `config/search.yaml` (default: vector 0.65, keyword 0.35).
+
+### 15.3 Automated TTL Lifecycle & Stale Re-Crawling
+- Configured source-family-specific TTLs in `config/search.yaml`:
+  - `news`: 1 day
+  - `social`: 2 days
+  - `forums`: 7 days
+  - `web_general` & `app_stores`: 14 days
+  - `code`: 30 days
+  - `academic`: 90 days
+  - `archives`: 180 days
+- `mark_stale_entries()` scans index entries and marks items whose age exceeds the TTL as `is_stale = True`.
+- `recrawl_stale_entries()` refetches stale canonical URLs using `PageFetchService`, deletes outdated passages, and writes updated passages with refreshed timestamps.
+
+### 15.4 Integration with SearchRouter & DataSourceRegistry
+- Registered `WebIndexDataSource` in `core/tools/registry.py` under name `web_index`.
+- Implemented `WebIndexProvider` wrapping `WebIndexStore.hybrid_search` and registered it on `SearchRouter`, enabling parallel shards to query the local index first before going to external networks.
+- Automatically persists verified notes into `WebIndexStore` inside `ResearchOrchestrator._execute_shard`.
+
+### 15.5 Test Verification
+- Created `tests/test_web_index.py` with 6 unit and integration tests:
+  1. `test_web_index_ingestion_and_hybrid_retrieval`: Verifies note passage ingestion, document section chunking, and dual hybrid search for benchmarks and pricing.
+  2. `test_web_index_tenant_isolation_zero_leakage`: Confirms Tenant B queries return zero results for confidential passages stored by Tenant A.
+  3. `test_web_index_source_family_filtering`: Verifies filtered retrieval by `academic` vs `forums`.
+  4. `test_web_index_stale_marking_and_recrawl`: Verifies automated TTL stale marking, exclusion from standard search, and background re-crawl.
+  5. `test_web_index_search_provider_adapter`: Verifies `WebIndexProvider` conforming to `SearchProvider` protocol with exact locations.
+  6. `test_web_index_in_datasource_registry`: Confirms registration in `DataSourceRegistry`.
+- All 6 tests passed in 2.11s.
+

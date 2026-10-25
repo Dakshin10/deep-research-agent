@@ -118,3 +118,24 @@ class DocumentChunkModel(Base):
     metadata_json = Column(JSON, default=dict)
 
     document = relationship("DocumentModel", back_populates="chunks")
+
+
+class WebIndexChunkModel(Base):
+    __tablename__ = "web_index_chunks"
+
+    id = Column(String(64), primary_key=True, default=lambda: f"widx_{uuid.uuid4().hex[:8]}")
+    tenant_id = Column(String(64), nullable=False, index=True)
+    url = Column(Text, nullable=False)
+    canonical_url = Column(Text, nullable=False, index=True)
+    title = Column(Text, nullable=True)
+    source_family = Column(String(32), nullable=False, default="web_general")
+    passage_text = Column(Text, nullable=False)
+    char_start = Column(Integer, nullable=True)
+    char_end = Column(Integer, nullable=True)
+    page_no = Column(Integer, nullable=True)
+    heading_path = Column(JSON, default=list)
+    text_fragment_url = Column(Text, nullable=True)
+    embedding = Column(JSON, nullable=True)  # vector representation
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    is_stale = Column(Boolean, default=False, index=True)

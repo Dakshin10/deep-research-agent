@@ -84,3 +84,18 @@ data_sources:
     enabled: true
     read_only: true
     allowed_tools: ["search_companies", "get_company", "search_deals", "get_deal", "search_contacts"]
+
+web_index:
+  enabled: true
+  top_k: 5
+  vector_weight: 0.65
+  keyword_weight: 0.35
+  ttl_days:
+    news: 1
+    social: 2
+    forums: 7
+    web_general: 14
+    app_stores: 14
+    code: 30
+    academic: 90
+    archives: 180

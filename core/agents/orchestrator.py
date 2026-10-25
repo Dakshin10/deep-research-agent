@@ -12,6 +12,7 @@ from core.agents.worker import ResearcherWorker
 from core.fetch.base import FetchedDocument
 from core.fetch.location import verify_excerpt_in_document
 from core.knowledge.store import KnowledgeStore
+from core.knowledge.web_index import WebIndexStore, WebIndexProvider
 from core.search.canonical import normalize_canonical_url
 from core.search.reranker import PassageReranker
 from core.search.router import SearchRouter
@@ -53,6 +54,7 @@ class ResearchOrchestrator:
         search_router: Optional[SearchRouter] = None,
         query_expander: Optional[QueryExpander] = None,
         reranker: Optional[PassageReranker] = None,
+        web_index_store: Optional[WebIndexStore] = None,
     ):
         self.tenant_id = tenant_id
         self.state_store = state_store
@@ -66,6 +68,14 @@ class ResearchOrchestrator:
         self.search_router = search_router or getattr(self.search_service, "router", None) or SearchRouter()
         self.query_expander = query_expander or QueryExpander()
         self.reranker = reranker or PassageReranker()
+        self.web_index_store = web_index_store
+        if self.web_index_store is None:
+            db_u = getattr(self.state_store, "db_url", "sqlite+aiosqlite:///:memory:")
+            sess_f = getattr(self.state_store, "_session_factory", None)
+            self.web_index_store = WebIndexStore(tenant_id=self.tenant_id, db_url=db_u, session_factory=sess_f)
+
+        if hasattr(self.search_router, "register_provider") and self.web_index_store:
+            self.search_router.register_provider("web_index", WebIndexProvider(self.web_index_store))
 
         # Semaphores
         self.global_sem = asyncio.Semaphore(concurrency_cap)
@@ -297,6 +307,11 @@ class ResearchOrchestrator:
                     )
                     await self.state_store.add_note(note)
                     shard_notes.append(note)
+                    if self.web_index_store:
+                        try:
+                            await self.web_index_store.index_note_passage(note, doc)
+                        except Exception:
+                            pass
 
             # 5. Follow-the-links step (depth <= 2, same topic, max 1 extra page)
             for doc in fetched_docs[:1]:
@@ -335,6 +350,11 @@ class ResearchOrchestrator:
                                         )
                                         await self.state_store.add_note(link_note)
                                         shard_notes.append(link_note)
+                                        if self.web_index_store:
+                                            try:
+                                                await self.web_index_store.index_note_passage(link_note, sub_doc)
+                                            except Exception:
+                                                pass
 
         await self.state_store.emit_event(
             job_id,

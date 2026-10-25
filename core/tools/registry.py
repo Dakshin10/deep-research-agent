@@ -175,6 +175,16 @@ class ArchivesDataSource(DataSource):
         return [lambda q: router.search(q, source_family="archives")]
 
 
+class WebIndexDataSource(DataSource):
+    name = "web_index"
+    description = "Tenant-scoped local web index of previously fetched, verified passages with hybrid vector + full-text retrieval."
+
+    def build_tools(self, tenant_id: str) -> List[Callable]:
+        from core.knowledge.web_index import WebIndexStore
+        store = WebIndexStore(tenant_id=tenant_id)
+        return [store.hybrid_search]
+
+
 class DataSourceRegistry:
     """Central registry of all data sources available in the Deep Researcher."""
 
@@ -201,6 +211,7 @@ class DataSourceRegistry:
         self.register(SocialDataSource())
         self.register(AppStoresDataSource())
         self.register(ArchivesDataSource())
+        self.register(WebIndexDataSource())
 
     def register(self, source: DataSource):
         self._sources[source.name] = source
