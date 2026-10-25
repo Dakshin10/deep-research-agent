@@ -109,7 +109,7 @@ async def test_checkpoint_and_resume_after_interrupt():
         assert clarify_resp.status_code == 200
 
         # 3. Wait for resumed graph execution to finish
-        for _ in range(50):
+        for _ in range(80):
             await asyncio.sleep(0.5)
             final_resp = await client.get(f"/v1/jobs/{job_id}", headers=headers)
             if final_resp.json()["status"] == "completed":

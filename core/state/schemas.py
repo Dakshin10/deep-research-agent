@@ -148,6 +148,18 @@ class BudgetState(BaseModel):
     warning_emitted: bool = False
     exhausted: bool = False
 
+    # Phase 4 extended budget tracking
+    fetched_pages: int = 0
+    providers_failed: int = 0
+    bytes_downloaded: int = 0
+
+    def record_fetch(self, pages_delta: int = 1, bytes_delta: int = 0) -> None:
+        self.fetched_pages += pages_delta
+        self.bytes_downloaded += bytes_delta
+
+    def record_provider_failure(self) -> None:
+        self.providers_failed += 1
+
     def check_and_update(self, steps_delta: int = 0, tokens_delta: int = 0) -> Optional[EventType]:
         self.used_steps += steps_delta
         self.used_tokens += tokens_delta

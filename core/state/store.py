@@ -462,3 +462,26 @@ class StateStore:
             )
         await self.update_job(job)
         return job.budget
+
+    # ---------------------------------------------------------
+    # Shared Seen URLs Tracking (Per Job)
+    # ---------------------------------------------------------
+    _seen_urls: Dict[str, set[str]] = defaultdict(set)
+    _seen_lock = asyncio.Lock()
+
+    async def is_url_seen(self, job_id: str, canonical_url: str) -> bool:
+        """Check if a canonical URL has already been fetched by any shard in this job."""
+        async with self._seen_lock:
+            return canonical_url in self._seen_urls[job_id]
+
+    async def mark_url_seen(self, job_id: str, canonical_url: str) -> bool:
+        """
+        Atomically test-and-set a canonical URL for a job.
+        Returns True if the URL was not previously seen (and is now marked),
+        False if it was already seen.
+        """
+        async with self._seen_lock:
+            if canonical_url in self._seen_urls[job_id]:
+                return False
+            self._seen_urls[job_id].add(canonical_url)
+            return True

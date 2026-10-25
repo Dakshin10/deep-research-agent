@@ -475,7 +475,18 @@ class ResearchGraphBuilder:
     async def _citation_gate_node(self, state: ResearchGraphState) -> Dict[str, Any]:
         raw_notes = state.get("notes") or []
         valid_ids = {n.get("id") for n in raw_notes}
-        gate = CitationGate(valid_note_ids=valid_ids, strict=True)
+        note_locations = {
+            n.get("id"): bool(
+                n.get("is_verified")
+                or n.get("char_start") is not None
+                or n.get("heading_path")
+                or n.get("page_no")
+                or n.get("source_type") in ("kb", "computed")
+            )
+            for n in raw_notes
+            if n.get("id")
+        }
+        gate = CitationGate(valid_note_ids=valid_ids, note_locations=note_locations, strict=True)
         eval_res = gate.evaluate(state.get("report", ""))
 
         return {

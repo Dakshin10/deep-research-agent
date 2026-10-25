@@ -41,14 +41,24 @@ class CitationGate:
         if not text:
             return CitationGateResult(passed=True, cleaned_text="")
 
-        sentences = re.split(r"(?<=[.!?])\s+", text)
+        # Separate main body from sources/bibliography section so source listings aren't evaluated as factual claims
+        sources_match = re.search(r"(?i)\n(?:---|###? (?:Verified )?Sources(?:\s*&|\s*Index)?)", text)
+        if sources_match:
+            body_text = text[: sources_match.start()]
+            sources_suffix = text[sources_match.start() :]
+        else:
+            body_text = text
+            sources_suffix = ""
+
+        sentences = re.split(r"(?<=[.!?])\s+", body_text)
         flagged: List[CitationIssue] = []
         valid_found: List[str] = []
         cleaned_sentences: List[str] = []
 
         for sent in sentences:
             stripped = sent.strip()
-            if not stripped:
+            if not stripped or stripped.startswith("- **[note_") or stripped.startswith("### "):
+                cleaned_sentences.append(stripped)
                 continue
 
             # Check for note citations in this sentence
@@ -91,7 +101,7 @@ class CitationGate:
                 cleaned_sentences.append(stripped)
 
         passed = len(flagged) == 0
-        cleaned_text = " ".join(cleaned_sentences)
+        cleaned_text = " ".join(cleaned_sentences) + sources_suffix
 
         return CitationGateResult(
             passed=passed,

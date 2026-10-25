@@ -36,6 +36,11 @@ class GapCheckVerifier:
 
         uncovered_tasks = [t for t in plan.tasks if task_notes_count[t.task_id] == 0]
 
+        # 2. Check for missing critical source families (e.g. forums, video, academic)
+        covered_families = {n.source_family for n in notes if n.source_family}
+        target_families = ["forums", "web_general"]
+        missing_families = [f for f in target_families if f not in covered_families]
+
         if uncovered_tasks:
             extra_tasks = []
             for t in uncovered_tasks[:2]:
@@ -50,6 +55,23 @@ class GapCheckVerifier:
                         status=TaskStatus.PENDING,
                     )
                 )
+            return GapCheckResult(needs_more_research=True, extra_tasks=extra_tasks)
+
+        if missing_families and len(notes) >= 3 and plan.tasks:
+            # Trigger single bounded extra round for missing family coverage
+            first_task = plan.tasks[0]
+            missing_fam = missing_families[0]
+            extra_tasks = [
+                PlanTask(
+                    task_id=f"gap_family_{missing_fam}",
+                    objective=f"Collect {missing_fam} community insights and comparative discussions for {first_task.entity}",
+                    entity=first_task.entity,
+                    source_hints=[missing_fam],
+                    expected_output=ExpectedOutput.NOTES,
+                    depends_on=[],
+                    status=TaskStatus.PENDING,
+                )
+            ]
             return GapCheckResult(needs_more_research=True, extra_tasks=extra_tasks)
 
         return GapCheckResult(needs_more_research=False, extra_tasks=[])

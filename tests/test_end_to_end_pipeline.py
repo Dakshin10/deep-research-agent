@@ -105,7 +105,7 @@ async def test_end_to_end_research_pipeline_vague_deep_request():
     assert "3.18" in computed_claims_str, f"Missing total ROAS 3.18 in computed notes: {computed_claims_str}"
 
     # 7. Verify Gates
-    assert final_state.get("gate_passed") is True, "Citation gate must pass"
+    assert final_state.get("gate_passed") is True, f"Citation gate must pass: {final_state.get('gate_issues')}"
     assert final_state.get("compliance_passed") is True, "Compliance gate must pass"
 
     # 8. Verify Delivery Artifacts

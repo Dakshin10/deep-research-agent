@@ -10,6 +10,12 @@ routing:
   rrf_k: 60
   simhash_max_distance: 3
 
+concurrency:
+  global: 24
+  per_provider: 4
+  per_domain: 2
+  max_shards_per_task: 12
+
 providers:
   default: "searxng"
   searxng:

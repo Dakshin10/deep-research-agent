@@ -384,3 +384,46 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
 - Created `tests/test_evidence_locations.py` with 6 comprehensive unit and integration tests (exact match, fuzzy match, fabricated excerpt rejection and event emission, PDF page resolution, text-fragment URL generation, CitationGate location enforcement, and Writer report rendering).
 - Full test suite execution: **35 passed in 80.95s** with zero failures.
 
+---
+
+## 14. Phase 4 Decisions: Massive Parallel Fan-Out Architecture
+
+### 14.1 Query Expander Agent (`core/agents/expander.py`)
+- Implemented `QueryExpander` that takes each `PlanTask` and expands it into 5-15 diverse sub-queries across multiple source families (`web_general`, `forums`, `code`, `academic`, `video`, `social`, `news`).
+- Generates `site:` targeted forms (`site:reddit.com`, `site:github.com`), benchmarking queries, architectural evaluation queries, and incorporates regional/geographical nuances when specified in `Brief.geography`.
+
+### 14.2 Sharded Fan-Out Orchestration with `asyncio.TaskGroup`
+- Rewrote `ResearchOrchestrator` (`core/agents/orchestrator.py`) to execute parallel research shards via `asyncio.TaskGroup`.
+- Implemented a 3-tier semaphore model:
+  1. `global_sem`: Enforces global concurrency cap (default 24).
+  2. `provider_sems`: Enforces per-provider concurrency cap (default 4).
+  3. `domain_sems`: Enforces per-domain concurrency cap (default 2).
+- Configurable in `config/search.yaml` under `concurrency`.
+- Shards run concurrently: `search -> dedup -> fetch -> rerank -> verify -> save`.
+
+### 14.3 StateStore Seen-URL Registry & Zero Duplicate Fetches
+- Added atomic `mark_url_seen(job_id, canonical_url)` and `is_url_seen(job_id, canonical_url)` to `StateStore`.
+- URLs discovered across concurrent shards are normalized to canonical URLs and checked against the shared per-job registry. If a canonical URL has already been queued or fetched by another shard, it is skipped immediately, saving network bandwidth and rate limits.
+
+### 14.4 Passage Reranker (`core/search/reranker.py`)
+- Implemented `PassageReranker` supporting neural CrossEncoders (e.g. `sentence-transformers` models like `bge-reranker-base`) with a fast, CPU-friendly BM25 / token cross-scoring fallback.
+- Reranks candidate document passages against the shard query prior to claim extraction, cutting down downstream LLM token consumption.
+
+### 14.5 BudgetState Extensions & Clean-Stop Behavior
+- Extended `BudgetState` with `fetched_pages: int`, `providers_failed: int`, and `bytes_downloaded: int`.
+- Each shard verifies budget health before initiating search or fetch steps. When `budget.exhausted` is reached, shards cleanly stop without crashing and return cleanly.
+
+### 14.6 GapCheckVerifier Extension for Missing Source Families
+- Extended `GapCheckVerifier` (`core/agents/verifier.py`) to audit source family coverage across collected notes (e.g., verifying presence of `forums` and `web_general`).
+- When missing critical source families, triggers a single bounded extra round of research explicitly targeting the missing family. Enforces a strict cap of 1 extra round to prevent infinite research loops.
+
+### 14.7 Test Verification
+- Created `tests/test_fanout_orchestrator.py` with 6 unit and integration tests:
+  1. `test_query_expander_diverse_families`: Verifies generation of 5-15 diverse sub-queries spanning multiple families and geographical targeting.
+  2. `test_passage_reranker_scoring`: Verifies BM25 / token cross-scoring ranking relevant passages highest.
+  3. `test_seen_url_deduplication`: Verifies atomic test-and-set behavior of `mark_url_seen`.
+  4. `test_gap_check_verifier_missing_family`: Verifies detection of missing source families and bounded single extra round.
+  5. `test_sharded_orchestrator_execution`: End-to-end mocked sharded execution with note extraction and exact location verification.
+  6. `test_orchestrator_budget_clean_stop`: Verifies clean stop mid-fanout when budget is exhausted.
+- Full test suite passed with 0 regressions.
+

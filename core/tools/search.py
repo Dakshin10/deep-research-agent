@@ -140,6 +140,10 @@ class SearchService:
             self._router = SearchRouter()
             self.provider = TavilySearchProvider()
 
+    @property
+    def router(self):
+        return self._router
+
     async def search(self, query: str, max_results: int = 5, source_family: str = "web_general") -> List[SearchResult]:
         if self._router is not None:
             hits = await self._router.search(query, source_family=source_family, limit=max_results)
