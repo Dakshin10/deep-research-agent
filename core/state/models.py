@@ -24,9 +24,9 @@ class JobModel(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    notes = relationship("ResearchNoteModel", back_populates="job", cascade="all, delete-orphan")
-    artifacts = relationship("ArtifactModel", back_populates="job", cascade="all, delete-orphan")
-    events = relationship("RunEventModel", back_populates="job", cascade="all, delete-orphan")
+    notes = relationship("ResearchNoteModel", back_populates="job", cascade="all, delete")
+    artifacts = relationship("ArtifactModel", back_populates="job", cascade="all, delete")
+    events = relationship("RunEventModel", back_populates="job", cascade="all, delete")
 
 
 class ResearchNoteModel(Base):

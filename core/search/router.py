@@ -138,7 +138,14 @@ class SearchRouter:
         limit: int,
         filters: Optional[Dict[str, Any]] = None,
     ) -> List[SearchHit]:
+        import time
+        from core.observability.tracing import record_provider_span
+        p_name = getattr(provider, "name", type(provider).__name__)
+        start = time.time()
         try:
-            return await provider.search(query, limit=limit, filters=filters)
-        except Exception:
+            hits = await provider.search(query, limit=limit, filters=filters)
+            record_provider_span(provider=p_name, query=query, duration=time.time() - start, hits_count=len(hits))
+            return hits
+        except Exception as e:
+            record_provider_span(provider=p_name, query=query, duration=time.time() - start, hits_count=0, error=str(e))
             return []

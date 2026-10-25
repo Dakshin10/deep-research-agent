@@ -247,3 +247,44 @@ def trace_tool(tool_name: str) -> Callable:
 def asyncio_iscoroutinefunction(func: Any) -> bool:
     import asyncio
     return asyncio.iscoroutinefunction(func)
+
+
+def record_shard_span(
+    shard_id: str,
+    task_id: str,
+    query: str,
+    duration: float,
+    notes_count: int,
+    error: Optional[str] = None,
+) -> TraceEvent:
+    """Records a Langfuse span specifically for a parallel research shard with latency and notes count."""
+    tracer = get_tracer()
+    return tracer.record_trace(
+        name=f"shard_{shard_id}",
+        trace_type="shard",
+        inputs={"shard_id": shard_id, "task_id": task_id, "query": query},
+        outputs={"notes_count": notes_count},
+        duration=duration,
+        status="error" if error else "success",
+        error=error,
+    )
+
+
+def record_provider_span(
+    provider: str,
+    query: str,
+    duration: float,
+    hits_count: int,
+    error: Optional[str] = None,
+) -> TraceEvent:
+    """Records a Langfuse span specifically for a search provider query with latency and error metrics."""
+    tracer = get_tracer()
+    return tracer.record_trace(
+        name=f"provider_{provider}",
+        trace_type="provider",
+        inputs={"provider": provider, "query": query},
+        outputs={"hits_count": hits_count},
+        duration=duration,
+        status="error" if error else "success",
+        error=error,
+    )

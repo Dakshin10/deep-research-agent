@@ -130,6 +130,36 @@ class FollowupResponse(BaseModel):
     answer: str
 
 
+class EvidenceLocation(BaseModel):
+    page_no: Optional[int] = None
+    heading_path: List[str] = Field(default_factory=list)
+    char_start: Optional[int] = None
+    char_end: Optional[int] = None
+    video_timestamp_url: Optional[str] = None
+
+
+class EvidenceSourceItem(BaseModel):
+    note_id: Optional[str] = None
+    url: str
+    canonical_url: Optional[str] = None
+    title: Optional[str] = None
+    source_family: str = "web_general"
+    location: EvidenceLocation = Field(default_factory=EvidenceLocation)
+    text_fragment_url: Optional[str] = None
+    status: str = "verified"  # "verified", "rejected", "blocked"
+    claim: Optional[str] = None
+    excerpt: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class JobSourcesResponse(BaseModel):
+    job_id: str
+    tenant_id: str
+    source_families: Dict[str, List[EvidenceSourceItem]]
+    coverage_counts: Dict[str, int]
+    total_sources: int
+
+
 # -------------------------------------------------------------
 # Background Execution Helper
 # -------------------------------------------------------------
@@ -363,6 +393,95 @@ async def get_job_artifacts(
     store = get_state_store(tenant_id)
     artifacts = await store.get_artifacts(job_id)
     return [a.model_dump() for a in artifacts]
+
+
+@app.get("/v1/jobs/{job_id}/sources", response_model=JobSourcesResponse)
+async def get_job_sources(
+    job_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    store: StateStore = Depends(get_state_store),
+):
+    """
+    Returns all evidence gathered for a job, grouped by source_family.
+    Includes exact location (page_no, heading_path, offsets, video timestamp),
+    clickable text_fragment_url, and status (verified/rejected/blocked).
+    """
+    job = await store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    notes = await store.get_notes(job_id)
+    events = await store.get_events(job_id)
+
+    families: Dict[str, List[EvidenceSourceItem]] = {}
+    coverage: Dict[str, int] = {}
+
+    # 1. Verified & unverified notes
+    for n in notes:
+        fam = n.source_family or "web_general"
+        if fam not in families:
+            families[fam] = []
+        coverage[fam] = coverage.get(fam, 0) + 1
+
+        loc = EvidenceLocation(
+            page_no=n.page_no,
+            heading_path=n.heading_path or [],
+            char_start=n.char_start,
+            char_end=n.char_end,
+            video_timestamp_url=n.video_timestamp_url,
+        )
+        families[fam].append(
+            EvidenceSourceItem(
+                note_id=n.id,
+                url=n.url or n.source_url or "https://example.com",
+                canonical_url=n.canonical_url,
+                title=n.title or (n.url or n.source_url),
+                source_family=fam,
+                location=loc,
+                text_fragment_url=n.text_fragment_url,
+                status="verified" if n.is_verified else "unverified",
+                claim=n.claim,
+                excerpt=n.excerpt,
+            )
+        )
+
+    # 2. Blocked pages and rejected notes from events
+    for ev in events:
+        if ev.event_type == EventType.PAGE_BLOCKED:
+            p_payload = ev.payload or {}
+            fam = "blocked"
+            if fam not in families:
+                families[fam] = []
+            families[fam].append(
+                EvidenceSourceItem(
+                    url=p_payload.get("url", ""),
+                    source_family="blocked",
+                    status="blocked",
+                    reason=p_payload.get("reason", "Domain blocked / forbidden"),
+                )
+            )
+        elif ev.event_type == EventType.NOTE_REJECTED:
+            r_payload = ev.payload or {}
+            fam = "rejected"
+            if fam not in families:
+                families[fam] = []
+            families[fam].append(
+                EvidenceSourceItem(
+                    url=r_payload.get("url", ""),
+                    source_family="rejected",
+                    status="rejected",
+                    reason=r_payload.get("reason", "Excerpt verification match failed in document text"),
+                )
+            )
+
+    total = sum(len(items) for items in families.values())
+    return JobSourcesResponse(
+        job_id=job_id,
+        tenant_id=tenant_id,
+        source_families=families,
+        coverage_counts=coverage,
+        total_sources=total,
+    )
 
 
 @app.post("/v1/tenants/{tenant_id}/documents")

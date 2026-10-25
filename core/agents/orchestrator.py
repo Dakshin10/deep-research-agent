@@ -4,6 +4,7 @@ import asyncio
 from collections import defaultdict
 import re
 from typing import Any, Dict, List, Optional, Set
+import time
 import urllib.parse
 import uuid
 
@@ -13,6 +14,7 @@ from core.fetch.base import FetchedDocument
 from core.fetch.location import verify_excerpt_in_document
 from core.knowledge.store import KnowledgeStore
 from core.knowledge.web_index import WebIndexStore, WebIndexProvider
+from core.observability.tracing import record_shard_span
 from core.search.canonical import normalize_canonical_url
 from core.search.reranker import PassageReranker
 from core.search.router import SearchRouter
@@ -205,10 +207,16 @@ class ResearchOrchestrator:
             },
         )
 
+        shard_start = time.time()
         async with self.global_sem:
             # 1. Search under provider semaphore
             provider_sem = self.provider_sems[sub_query.source_family]
             async with provider_sem:
+                await self.state_store.emit_event(
+                    job_id,
+                    EventType.SEARCH_STARTED,
+                    {"shard_id": shard_id, "query": sub_query.query, "source_family": sub_query.source_family},
+                )
                 try:
                     search_hits = await self.search_router.search(
                         sub_query.query,
@@ -217,6 +225,13 @@ class ResearchOrchestrator:
                     )
                 except Exception:
                     search_hits = []
+
+            for hit in search_hits:
+                await self.state_store.emit_event(
+                    job_id,
+                    EventType.SEARCH_HIT,
+                    {"shard_id": shard_id, "title": hit.title, "url": hit.url, "provider": hit.provider},
+                )
 
             # 2. Pick top URLs and deduplicate against StateStore seen URLs
             candidate_urls: List[str] = []
@@ -356,10 +371,23 @@ class ResearchOrchestrator:
                                             except Exception:
                                                 pass
 
+        duration = time.time() - shard_start
         await self.state_store.emit_event(
             job_id,
             EventType.SHARD_DONE,
-            {"shard_id": shard_id, "notes_count": len(shard_notes)},
+            {"shard_id": shard_id, "notes_count": len(shard_notes), "duration": round(duration, 2)},
+        )
+        await self.state_store.emit_event(
+            job_id,
+            EventType.SOURCE_COVERAGE,
+            {"source_family": sub_query.source_family, "new_notes": len(shard_notes)},
+        )
+        record_shard_span(
+            shard_id=shard_id,
+            task_id=task.task_id,
+            query=sub_query.query,
+            duration=duration,
+            notes_count=len(shard_notes),
         )
         return shard_notes
 

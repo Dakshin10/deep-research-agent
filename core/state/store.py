@@ -41,6 +41,8 @@ class StateStore:
     # In-memory broadcast queues for SSE clients keyed by job_id
     _subscribers: Dict[str, List[asyncio.Queue]] = defaultdict(list)
     _lock = asyncio.Lock()
+    _write_lock = asyncio.Lock()
+    _task_lock = _write_lock
 
     def __init__(
         self,
@@ -56,7 +58,12 @@ class StateStore:
     async def init_db(self):
         """Initialize database schema if not already initialized."""
         if self._session_factory is None:
-            self._engine = create_async_engine(self.db_url, echo=False)
+            engine_kwargs = {"echo": False}
+            if ":memory:" in self.db_url:
+                from sqlalchemy.pool import StaticPool
+                engine_kwargs["poolclass"] = StaticPool
+                engine_kwargs["connect_args"] = {"check_same_thread": False}
+            self._engine = create_async_engine(self.db_url, **engine_kwargs)
             async with self._engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
                 # Auto-migrate SQLite schema for missing columns if table pre-existed
@@ -104,23 +111,24 @@ class StateStore:
     # ---------------------------------------------------------
     async def create_job(self, job: Job) -> Job:
         job.tenant_id = self.tenant_id
-        async with await self.get_session() as session:
-            model = JobModel(
-                id=job.id,
-                tenant_id=job.tenant_id,
-                query=job.query,
-                status=job.status.value,
-                mode=job.mode.value,
-                confidence=job.confidence,
-                brief=job.brief.model_dump() if job.brief else None,
-                plan=job.plan.model_dump() if job.plan else None,
-                report=job.report,
-                budget=job.budget.model_dump(),
-                created_at=job.created_at,
-                updated_at=job.updated_at,
-            )
-            session.add(model)
-            await session.commit()
+        async with self._write_lock:
+            async with await self.get_session() as session:
+                model = JobModel(
+                    id=job.id,
+                    tenant_id=job.tenant_id,
+                    query=job.query,
+                    status=job.status.value,
+                    mode=job.mode.value,
+                    confidence=job.confidence,
+                    brief=job.brief.model_dump() if job.brief else None,
+                    plan=job.plan.model_dump() if job.plan else None,
+                    report=job.report,
+                    budget=job.budget.model_dump(),
+                    created_at=job.created_at,
+                    updated_at=job.updated_at,
+                )
+                session.add(model)
+                await session.commit()
 
         await self.emit_event(
             job_id=job.id,
@@ -158,23 +166,24 @@ class StateStore:
     async def update_job(self, job: Job) -> Job:
         job.tenant_id = self.tenant_id
         job.updated_at = datetime.now(timezone.utc)
-        async with await self.get_session() as session:
-            stmt = select(JobModel).where(
-                JobModel.id == job.id,
-                JobModel.tenant_id == self.tenant_id,
-            )
-            res = await session.execute(stmt)
-            model = res.scalar_one_or_none()
-            if model:
-                model.status = job.status.value
-                model.mode = job.mode.value
-                model.confidence = job.confidence
-                model.brief = job.brief.model_dump() if job.brief else None
-                model.plan = job.plan.model_dump() if job.plan else None
-                model.report = job.report
-                model.budget = job.budget.model_dump()
-                model.updated_at = job.updated_at
-                await session.commit()
+        async with self._write_lock:
+            async with await self.get_session() as session:
+                stmt = select(JobModel).where(
+                    JobModel.id == job.id,
+                    JobModel.tenant_id == self.tenant_id,
+                )
+                res = await session.execute(stmt)
+                model = res.scalar_one_or_none()
+                if model:
+                    model.status = job.status.value
+                    model.mode = job.mode.value
+                    model.confidence = job.confidence
+                    model.brief = job.brief.model_dump() if job.brief else None
+                    model.plan = job.plan.model_dump() if job.plan else None
+                    model.report = job.report
+                    model.budget = job.budget.model_dump()
+                    model.updated_at = job.updated_at
+                    await session.commit()
         return job
 
     # ---------------------------------------------------------
@@ -283,20 +292,21 @@ class StateStore:
     # ---------------------------------------------------------
     async def add_artifact(self, artifact: Artifact) -> Artifact:
         artifact.tenant_id = self.tenant_id
-        async with await self.get_session() as session:
-            model = ArtifactModel(
-                id=artifact.id,
-                job_id=artifact.job_id,
-                tenant_id=artifact.tenant_id,
-                artifact_type=artifact.artifact_type,
-                title=artifact.title,
-                file_path=artifact.file_path,
-                content=artifact.content,
-                metadata_json=artifact.metadata,
-                created_at=artifact.created_at,
-            )
-            session.add(model)
-            await session.commit()
+        async with self._write_lock:
+            async with await self.get_session() as session:
+                model = ArtifactModel(
+                    id=artifact.id,
+                    job_id=artifact.job_id,
+                    tenant_id=artifact.tenant_id,
+                    artifact_type=artifact.artifact_type,
+                    title=artifact.title,
+                    file_path=artifact.file_path,
+                    content=artifact.content,
+                    metadata_json=artifact.metadata,
+                    created_at=artifact.created_at,
+                )
+                session.add(model)
+                await session.commit()
 
         await self.emit_event(
             job_id=artifact.job_id,

@@ -164,50 +164,52 @@ class WebIndexStore:
         chunk_ids: List[str] = []
         now = datetime.now(timezone.utc)
 
-        # 1. Index sections if present
-        if doc.sections:
+        from core.state.store import StateStore
+        async with StateStore._write_lock:
+            # 1. Index sections if present
+            if doc.sections:
+                async with await self.get_session() as session:
+                    for sec in doc.sections:
+                        if len(sec.text.strip()) < 30:
+                            continue
+                        vec = self.embedder.embed_text(sec.text)
+                        frag_url = generate_text_fragment_url(doc.final_url or doc.url, sec.text[:120])
+                        cid = f"widx_{uuid.uuid4().hex[:8]}"
+                        model = WebIndexChunkModel(
+                            id=cid,
+                            tenant_id=self.tenant_id,
+                            url=doc.final_url or doc.url,
+                            canonical_url=canonical,
+                            title=doc.title or "",
+                            source_family=source_family,
+                            passage_text=sec.text,
+                            char_start=sec.char_start,
+                            char_end=sec.char_end,
+                            heading_path=sec.heading_path or [],
+                            text_fragment_url=frag_url,
+                            embedding=vec,
+                            created_at=now,
+                            updated_at=now,
+                            is_stale=False,
+                        )
+                        session.add(model)
+                        chunk_ids.append(cid)
+                    await session.commit()
+                return chunk_ids
+
+            # 2. Linear chunk fallback
+            raw = doc.raw_text
+            step = chunk_size - 80
+            passages: List[Tuple[str, int, int]] = []
+            for i in range(0, len(raw), step):
+                sub = raw[i : i + chunk_size].strip()
+                if len(sub) >= 40:
+                    passages.append((sub, i, min(len(raw), i + chunk_size)))
+
             async with await self.get_session() as session:
-                for sec in doc.sections:
-                    if len(sec.text.strip()) < 30:
-                        continue
-                    vec = self.embedder.embed_text(sec.text)
-                    frag_url = generate_text_fragment_url(doc.final_url or doc.url, sec.text[:120])
-                    cid = f"widx_{uuid.uuid4().hex[:8]}"
-                    model = WebIndexChunkModel(
-                        id=cid,
-                        tenant_id=self.tenant_id,
-                        url=doc.final_url or doc.url,
-                        canonical_url=canonical,
-                        title=doc.title or "",
-                        source_family=source_family,
-                        passage_text=sec.text,
-                        char_start=sec.char_start,
-                        char_end=sec.char_end,
-                        heading_path=sec.heading_path or [],
-                        text_fragment_url=frag_url,
-                        embedding=vec,
-                        created_at=now,
-                        updated_at=now,
-                        is_stale=False,
-                    )
-                    session.add(model)
-                    chunk_ids.append(cid)
-                await session.commit()
-            return chunk_ids
-
-        # 2. Linear chunk fallback
-        raw = doc.raw_text
-        step = chunk_size - 80
-        passages: List[Tuple[str, int, int]] = []
-        for i in range(0, len(raw), step):
-            sub = raw[i : i + chunk_size].strip()
-            if len(sub) >= 40:
-                passages.append((sub, i, min(len(raw), i + chunk_size)))
-
-        async with await self.get_session() as session:
-            for text_chunk, c_start, c_end in passages:
-                vec = self.embedder.embed_text(text_chunk)
-                frag_url = generate_text_fragment_url(doc.final_url or doc.url, text_chunk[:100])
+                for text_chunk, c_start, c_end in passages:
+                    vec = self.embedder.embed_text(text_chunk)
+                    frag_url = generate_text_fragment_url(doc.final_url or doc.url, text_chunk[:100])
                 cid = f"widx_{uuid.uuid4().hex[:8]}"
                 model = WebIndexChunkModel(
                     id=cid,

@@ -470,3 +470,39 @@ tests/test_live_smoke.py::test_live_docker_sandbox_network_none_blocks_outbound 
   6. `test_web_index_in_datasource_registry`: Confirms registration in `DataSourceRegistry`.
 - All 6 tests passed in 2.11s.
 
+---
+
+## 16. Phase 6 Decisions: API, Events, and UI
+
+### 16.1 Granular Real-Time SSE Events (`core/state/schemas.py`)
+- Extended `EventType` enum with real-time research lifecycle events:
+  - `SEARCH_STARTED`: Emitted with query and target `source_family`.
+  - `SEARCH_HIT`: Emitted per retrieved hit with URL, title, and provider name.
+  - `PAGE_FETCHED`: Emitted when a document is fetched with status, content length, and content hash.
+  - `PAGE_BLOCKED`: Emitted on domain blocks, robots.txt denials, or rate-limit saturation with reason.
+  - `NOTE_REJECTED`: Emitted when verbatim excerpt verification fails against document text.
+  - `SHARD_STARTED` / `SHARD_DONE`: Emitted per parallel worker shard with latency and note yields.
+  - `SOURCE_COVERAGE`: Emitted with live coverage breakdown per source family (`web_general`, `forums`, `code`, `academic`, etc.).
+
+### 16.2 Sources API Endpoint (`apps/api/main.py`)
+- Implemented `GET /v1/jobs/{job_id}/sources`:
+  - Returns structured evidence grouped by `source_family` (`web_general`, `news`, `forums`, `code`, `academic`, `video`, `social`, `app_stores`, `archives`, `blocked`, `rejected`).
+  - Each item includes: `note_id`, `url`, `title`, `status` (`verified`, `rejected`, `blocked`), exact `location` (`page_no`, `heading_path`, `char_start`, `char_end`, `video_timestamp_url`), `text_fragment_url`, and `confidence`.
+  - Also outputs `coverage_counts` by family and `total_sources` metrics.
+  - Fully tenant-isolated with `X-Tenant-ID` header validation.
+
+### 16.3 Langfuse Observability Spans (`core/observability/tracing.py`)
+- Added `record_shard_span(shard_id, task_id, query, duration, notes_count, status)` recording per-shard latency and yield.
+- Added `record_provider_span(provider_name, query, duration, hits_count, status)` instrumenting `SearchRouter` to track per-upstream latency, failure rates, and hit counts.
+- Maintains non-blocking fallback when Langfuse API keys are not provisioned in local test environments.
+
+### 16.4 Gradio UI Live Parallel Agent & Evidence Panel (`app.py`)
+- Upgraded Gradio interface with:
+  1. **Parallel Research Shards Panel**: Displays active and completed worker agents with live badges, query targets, and note counts.
+  2. **Source Coverage Progress Bar**: Dynamic HTML bar chart showing proportional coverage across all 8 source families.
+  3. **Clickable Evidence Table**: Comprehensive table displaying verified notes, direct clickable `#:~:text=` text fragment links, PDF page numbers, and exact section headings.
+
+### 16.5 Concurrency and Transaction Synchronization Fix
+- Fixed SQLite single-writer race conditions across `StateStore` and `WebIndexStore` by introducing a class-level `_write_lock` that synchronizes all database write sessions (`create_job`, `update_job`, `add_note`, `add_artifact`, `index_note_passage`).
+- Replaced `cascade="all, delete-orphan"` with `cascade="all, delete"` on `JobModel.notes`, `JobModel.artifacts`, and `JobModel.events` to prevent independent notes from being marked as orphans when `update_job` executes.
+

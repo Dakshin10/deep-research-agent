@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from typing import Optional
-from fastapi import Header, Request
+from fastapi import Depends, Header, Request
 from core.state.store import StateStore
 from core.models.router import ModelRouter
 
@@ -32,6 +32,6 @@ def get_tenant_id(
     return os.environ.get("DEFAULT_TENANT_ID", "tenant_default")
 
 
-def get_state_store(tenant_id: Optional[str] = None) -> StateStore:
+def get_state_store(tenant_id: Optional[str] = Depends(get_tenant_id)) -> StateStore:
     tid = tenant_id or os.environ.get("DEFAULT_TENANT_ID", "tenant_default")
     return StateStore(tenant_id=tid, db_url=_DEFAULT_DB_URL)
