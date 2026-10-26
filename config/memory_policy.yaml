@@ -1,0 +1,31 @@
+# Memory Governance and Privacy Policy
+# Proactively prevents sensitive credentials, financial data, and PII from entering graph memory.
+
+version: 1.0
+
+fence:
+  strict_mode: true
+  drop_sensitive_facts: true
+
+# Prohibited entity content patterns (regex)
+blocked_patterns:
+  - '(?i)(?:api[_-]?key|secret|token|bearer|password|passwd|auth[_-]?token)\s*[:=]\s*[A-Za-z0-9_\-\.]{8,}'
+  - '(?i)gh[pous]_[A-Za-z0-9_]{36}'  # GitHub PATs
+  - '(?i)sk-[A-Za-z0-9]{32,}'        # OpenAI / LLM keys
+  - '(?i)\b(?:\d[ -]*?){13,16}\b'     # Credit card numbers
+  - '(?i)\b\d{3}-\d{2}-\d{4}\b'       # US SSN
+  - '(?i)\b(?:diagnosis|prescription|patient ID|medical record|blood pressure|dosage)\b' # Health/PHI
+
+# Minimum salience score to be committed to L2/L3 persistent memory
+min_salience_score: 0.60
+
+# Recency decay settings (exponential decay)
+decay:
+  half_life_days: 30
+  min_weight_floor: 0.20
+
+# Relevance gating: only retrieve memory if semantic query alignment > threshold
+retrieval:
+  relevance_gate_threshold: 0.45
+  max_context_tokens: 600
+  graph_expansion_depth: 2

@@ -23,6 +23,8 @@ from core.chat.schemas import (
     TextDeltaEvent,
     ToolCallFinishedEvent,
     ToolCallStartedEvent,
+    MemoryUsedEvent,
+    MemoryWriteProposedEvent,
     ChatEvent,
 )
 from core.chat.store import ChatStore
@@ -35,6 +37,8 @@ from core.chat.tools import (
 from core.codemode.backend import CodeModeBackend
 from core.codemode.local import LocalBackend
 from core.codemode.cloudflare import CloudflareBackend
+from core.memory.service import LayeredMemoryService, MemoryService
+
 
 
 
@@ -50,9 +54,11 @@ class MainChatAgent:
         store: Optional[ChatStore] = None,
         tenant_id: str = "default_tenant",
         backend: Optional[CodeModeBackend] = None,
+        memory: Optional[MemoryService] = None,
     ):
         self.tenant_id = tenant_id
         self.store = store or ChatStore(tenant_id=tenant_id)
+        self.memory = memory or LayeredMemoryService()
         if backend:
             self.backend = backend
         else:
@@ -137,6 +143,26 @@ class MainChatAgent:
         if conv and conv.title == "New Research Chat":
             new_title = await self.auto_title_conversation(user_message)
             await self.store.update_conversation_title(conversation_id, new_title)
+
+        # 2. Hybrid Memory Recall (if not incognito)
+        if not incognito:
+            try:
+                recalled_items = await self.memory.recall(query=user_message, tenant_id=self.tenant_id, limit=3)
+                if recalled_items:
+                    yield MemoryUsedEvent(
+                        turn_id=turn_id,
+                        memories=[
+                            {
+                                "id": r.id,
+                                "entity": r.entity_name,
+                                "fact": r.fact,
+                                "provenance": r.provenance,
+                            }
+                            for r in recalled_items
+                        ],
+                    )
+            except Exception:
+                pass
 
         intent = self.route_intent(user_message, model_role=model_role)
         assistant_content_chunks: List[str] = []
