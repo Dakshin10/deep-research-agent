@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import uuid
@@ -12,6 +13,8 @@ from core.chat.schemas import (
     ChatRole,
     CitationEvent,
     ClarificationRequestEvent,
+    ApprovalRequestEvent,
+    CodeExecutionEvent,
     DoneEvent,
     MessagePart,
     PartType,
@@ -29,6 +32,10 @@ from core.chat.tools import (
     run_ideas_search_tool,
     run_crawl_start_tool,
 )
+from core.codemode.backend import CodeModeBackend
+from core.codemode.local import LocalBackend
+from core.codemode.cloudflare import CloudflareBackend
+
 
 
 class MainChatAgent:
@@ -38,9 +45,19 @@ class MainChatAgent:
     or tool executions, and streams typed SSE events.
     """
 
-    def __init__(self, store: Optional[ChatStore] = None, tenant_id: str = "default_tenant"):
+    def __init__(
+        self,
+        store: Optional[ChatStore] = None,
+        tenant_id: str = "default_tenant",
+        backend: Optional[CodeModeBackend] = None,
+    ):
         self.tenant_id = tenant_id
         self.store = store or ChatStore(tenant_id=tenant_id)
+        if backend:
+            self.backend = backend
+        else:
+            backend_mode = os.getenv("CODEMODE_BACKEND", "local").lower()
+            self.backend = CloudflareBackend() if backend_mode == "cloudflare" else LocalBackend()
 
     async def auto_title_conversation(self, query: str) -> str:
         """Generates a concise 3-6 word title from the initial user query."""
@@ -50,9 +67,10 @@ class MainChatAgent:
             return clean.title() or "Research Inquiry"
         return " ".join(words[:5]).title()
 
-    def route_intent(self, message: str) -> str:
+    def route_intent(self, message: str, model_role: Optional[str] = None) -> str:
         """
         Classifies user prompt intent:
+        - 'codemode': Execute JavaScript in isolated Code Mode sandbox
         - 'clarify': Needs more specifics before proceeding
         - 'deep_research': Thorough multi-shard research run
         - 'ideas_search': Querying hackathon/startup projects
@@ -61,6 +79,12 @@ class MainChatAgent:
         - 'direct': Quick answers / chat
         """
         msg = message.lower().strip()
+
+        # Check for Code Mode or code role
+        if model_role == "code" or any(trigger in msg for trigger in [
+            "code mode", "run code", "execute js", "execute code", "javascript", "hubspot", "analytics", "join api", "query ga4"
+        ]):
+            return "codemode"
 
         # Check for vague requests needing clarification
         if msg in ["do a brand audit", "audit our product", "research our competitors", "do market research"]:
@@ -92,6 +116,8 @@ class MainChatAgent:
         user_message: str,
         parent_message_id: Optional[str] = None,
         incognito: bool = False,
+        model_role: Optional[str] = None,
+        approval_token: Optional[str] = None,
     ) -> AsyncGenerator[ChatEvent, None]:
         """
         Executes a turn of the conversation, yielding typed ChatEvents in real-time.
@@ -112,15 +138,66 @@ class MainChatAgent:
             new_title = await self.auto_title_conversation(user_message)
             await self.store.update_conversation_title(conversation_id, new_title)
 
-        intent = self.route_intent(user_message)
+        intent = self.route_intent(user_message, model_role=model_role)
         assistant_content_chunks: List[str] = []
         turn_citations: List[CitationEvent] = []
         turn_artifacts: List[ArtifactEvent] = []
 
         # -------------------------------------------------------------
+        # BRANCH 0: Code Mode Execution
+        # -------------------------------------------------------------
+        if intent == "codemode":
+            yield ReasoningSummaryEvent(turn_id=turn_id, summary="Executing sandboxed JavaScript via Cloudflare Code Mode...")
+
+            if "research" in user_message.lower():
+                code_snippet = f'const res = await api.research.deep({{ query: "{user_message}" }});\nreturn res;'
+            elif "idea" in user_message.lower():
+                code_snippet = f'const res = await api.ideas.search({{ query: "{user_message}" }});\nreturn res;'
+            elif "hubspot" in user_message.lower() or "deal" in user_message.lower():
+                code_snippet = 'const deals = await api.analytics.query({ metric: "hubspot_deals", date_range: "last_30_days" });\nreturn deals;'
+            elif "crawl" in user_message.lower():
+                code_snippet = 'const res = await api.crawl.start({ source: "devpost", max_depth: 2 });\nreturn res;'
+            else:
+                code_snippet = f'// Code Mode execution\nconst result = {{ status: "ok", query: "{user_message}" }};\nreturn result;'
+
+            exec_res = await self.backend.execute(
+                code=code_snippet,
+                tenant_id=self.tenant_id,
+                approval_token=approval_token,
+            )
+
+            if not exec_res.success and "approval" in (exec_res.error or "").lower():
+                yield ApprovalRequestEvent(
+                    turn_id=turn_id,
+                    action_id=f"act_{uuid.uuid4().hex[:8]}",
+                    description=f"Action requires explicit user confirmation: {exec_res.error}",
+                    payload={"code": code_snippet},
+                )
+                err_text = f"⚠️ **Approval Required**: {exec_res.error}\n\nPlease click **Approve** to proceed."
+                assistant_content_chunks.append(err_text)
+                yield TextDeltaEvent(turn_id=turn_id, content=err_text)
+            else:
+                yield CodeExecutionEvent(
+                    turn_id=turn_id,
+                    execution_id=f"exec_{uuid.uuid4().hex[:8]}",
+                    code=code_snippet,
+                    result=json.dumps(exec_res.result or exec_res.error, indent=2),
+                    duration_ms=int(exec_res.wall_time_ms),
+                    sandboxed=True,
+                )
+
+                if exec_res.success:
+                    ans_text = f"Executed in Code Mode isolate ({int(exec_res.wall_time_ms)}ms):\n\n```json\n{json.dumps(exec_res.result, indent=2)}\n```"
+                else:
+                    ans_text = f"Code Mode execution failed: {exec_res.error}"
+
+                assistant_content_chunks.append(ans_text)
+                yield TextDeltaEvent(turn_id=turn_id, content=ans_text)
+
+        # -------------------------------------------------------------
         # BRANCH A: Clarification Request
         # -------------------------------------------------------------
-        if intent == "clarify":
+        elif intent == "clarify":
             yield ReasoningSummaryEvent(turn_id=turn_id, summary="Assessing inquiry specificity and scope...")
             await asyncio.sleep(0.05)
 

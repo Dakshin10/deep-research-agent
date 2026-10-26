@@ -58,6 +58,8 @@ async def create_chat_turn(
             user_message=req.message,
             parent_message_id=req.parent_message_id,
             incognito=req.incognito,
+            model_role=req.model_role,
+            approval_token=req.approval_token,
         ):
             yield {
                 "event": event.type,
