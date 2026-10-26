@@ -76,9 +76,10 @@ class HybridMemoryRetriever:
             entity_name = entity.name if entity else "General"
             entity_type = entity.entity_type.value if entity and hasattr(entity.entity_type, "value") else "Projects"
 
-            # 1. Text match score
+            # 1. Text match score and entity match bonus
             content = f"{entity_name} {fact.statement}"
             text_score = self.compute_bm25_score(query, content)
+            entity_bonus = 0.25 if entity_name.lower() in query.lower() else 0.0
 
             # 2. Graph neighborhood bonus (if entity has rich connections)
             degree = len(entity_relations.get(fact.entity_id, []))
@@ -90,7 +91,7 @@ class HybridMemoryRetriever:
 
             # 4. Final fused score
             salience = entity.salience if entity else 0.8
-            fused_score = (text_score * 0.6 + graph_bonus * 0.2) * recency * salience
+            fused_score = (text_score * 0.7 + entity_bonus + graph_bonus * 0.1) * recency * salience
 
             if fused_score >= self.relevance_threshold:
                 item = MemoryRecallItem(

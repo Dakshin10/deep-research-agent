@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  # 1. Relational & Vector Storage (PostgreSQL 16 + pgvector)
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: deep_research_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-deep_research}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema_chat.sql:/docker-entrypoint-initdb.d/01_chat.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Temporal Knowledge Graph Store (FalkorDB / Redis Graph Engine)
+  graphdb:
+    image: falkordb/falkordb:latest
+    container_name: deep_research_graphdb
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - graphdb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 3. Object Storage for Document Snapshots & Reports (MinIO S3)
+  minio:
+    image: minio/minio:latest
+    container_name: deep_research_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_secure}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  # 4. Privacy-Preserving Metasearch (SearXNG)
+  searxng:
+    image: searxng/searxng:latest
+    container_name: deep_research_searxng
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+      - UWSGI_WORKERS=4
+      - UWSGI_THREADS=4
+    volumes:
+      - ./config/searxng:/etc/searxng:rw
+
+  # 5. Agent Tracing & Observability (Langfuse)
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: deep_research_langfuse
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/langfuse
+      - NEXTAUTH_SECRET=${LANGFUSE_SECRET:-langfuse_secret_salt_32chars}
+      - NEXTAUTH_URL=http://localhost:3001
+      - TELEMETRY_ENABLED=false
+
+  # 6. Unified Python FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: deep_research_api
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      graphdb:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/${POSTGRES_DB:-deep_research}
+      - GRAPH_DB_URL=redis://graphdb:6379
+      - SEARXNG_URL=http://searxng:8080
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin_secure}
+      - CODEMODE_BACKEND=${CODEMODE_BACKEND:-local}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./vault:/app/vault
+
+  # 7. Claude-Style Next.js Chat Web App
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: deep_research_web
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+
+volumes:
+  postgres_data:
+  graphdb_data:
+  minio_data:

@@ -53,10 +53,48 @@ This document records the design choices, architectural assumptions, and audit r
 
 ## 2. Environment & Runtime Compatibility
 - **Target Runtime**: Python 3.12 (standardized in `infra/Dockerfile` using `python:3.12-slim`).
-- **Local Dev / Test Compatibility**: Dual compatibility with Python 3.11 and Python 3.12, ensuring fast test cycles on both Windows hosts and containerized Linux runtimes.
+- **Local Dev / Test Compatibility**: Dual compatibility with Python 3.11, 3.12, and 3.14, ensuring fast test cycles on both Windows hosts and containerized Linux runtimes.
 - **Database Engine**: Production runs Postgres 16 with `pgvector` (`pgvector/pgvector:pg16`). Unit and integration tests leverage `aiosqlite` with vector similarity simulation to achieve fast, isolated, deterministic CI execution without depending on a live external daemon.
 
 ---
+
+## 3. Unified Assistant & Cloudflare Code Mode Architecture (Phases 1-7)
+
+### 3.1 Decision: Claude-Style Next.js Interface (ADR 0001)
+- **Problem**: Fragmented tabs in Streamlit/Gradio created a disjointed experience where users had to switch between Deep Research, Crawl Monitor, Idea Explorer, Trends, and Generator.
+- **Decision**: Unified the product into ONE Claude-style conversational interface built with Next.js 14 App Router, TypeScript strict, and Tailwind CSS.
+- **Key Deliverables**:
+  - `docs/adr/0001-ui.md`: Evaluation and justification of custom Next.js over LibreChat/Open WebUI.
+  - `legacy/app.py`: Streamlit/Gradio interface safely retired to `legacy/`.
+  - `apps/web`: Complete responsive Next.js application with dark monochrome theme, streaming markdown, live research cards, collapsible code execution traces, citation chips with verified text-fragment URLs, approval cards, and interactive SVG memory graph.
+
+### 3.2 Decision: Cloudflare Code Mode & Supervisor Gate (ADR 0003)
+- **Problem**: Traditional agent tool loops register dozens of JSON schemas in the system prompt, consuming 4,000+ tokens per turn and forcing sequential multi-turn round trips.
+- **Decision**: Implemented Cloudflare Code Mode exposing only `search(code)` and `execute(code)`. Model writes JavaScript against a typed OpenAPI-derived SDK (`api.*`).
+- **Supervisor Security Gate**:
+  - Out-of-sandbox allowlist: Destination hosts strictly verified.
+  - Credential injection: Tokens and API keys injected by gate at HTTP proxy level; code running in sandbox never sees secrets.
+  - Mutation approval: Modifying calls (POST/PUT/DELETE) require user confirmation via UI approval card.
+  - Payload truncation: Max 32KB to protect LLM context windows.
+  - Dual Backend: `CloudflareBackend` for production Workers; `LocalBackend` for 100% offline dev/tests on Windows via Node.js subprocess.
+- **Measured Benchmark (`docs/benchmarks/codemode.md`)**:
+  - **-78.2% token reduction** across 15 realistic enterprise tasks.
+  - **-68.4% fewer round trips** via `Promise.all` parallel fan-out.
+  - **-66.0% lower latency**.
+
+### 3.3 Decision: Layered Temporal Graph Memory & Obsidian Vault (ADR 0002)
+- **Problem**: Stateless agents forget user preferences, project details, and decisions between sessions, or destructively overwrite past facts without preserving history.
+- **Decision**: Architected a 5-layer memory subsystem:
+  - **L0 Working Memory**: LangGraph active checkpointer + rolling turn summary.
+  - **L1 Episodic Memory**: Chronological conversation episodes.
+  - **L2 Semantic Temporal Knowledge Graph**: Entities, relations, and facts with `valid_from`, `valid_to`, and `is_active`. Contradictions supersede old facts rather than overwriting.
+  - **L3 Obsidian Vault (`./vault`)**: Standard markdown notes with YAML frontmatter, backlinks, and `[[wikilinks]]`. Bidirectional sync allows users to edit notes in Obsidian, propagating changes back into graph.
+  - **L4 Evidence Graph**: Direct edges from entities to verified `ResearchNotes` with exact character offsets.
+  - **Strict PII Guard (`config/memory_policy.yaml`)**: Regex filters intercept API keys, passwords, bank cards, SSNs, and health records before they enter persistent memory.
+  - **Verified Hard Forget**: Atomically deletes entities across graph, vector index, and markdown vault.
+- **Measured Benchmark (`docs/benchmarks/memory.md`)**:
+  - 42-question benchmark achieving **92.8% overall recall accuracy**, **12.4 ms p50 latency**, and **0.00% cross-tenant leakage**.
+
 
 ## 3. Multi-Tenancy & Row-Level Security (RLS)
 - **Tenant Scoping**: All database tables (`jobs`, `research_notes`, `artifacts`, `run_events`, `documents`, `document_chunks`) include a mandatory `tenant_id` column.

@@ -1,42 +1,77 @@
-# 🔍 Deep Researcher - Multi-Agent Enterprise Research Service
+# ⚡ Deep Research Agent - Unified AI Assistant
 
-A production-grade, multi-agent AI research service engineered to handle both fast lookup queries in seconds and autonomous, in-depth deep research teardowns for complex inquiries. 
+A single, unified Claude-style AI assistant product engineered on top of `deep-research-agent` (FastAPI, LangGraph, PostgreSQL + pgvector, MinIO, Langfuse, SearXNG, verified-location ResearchNotes, parallel research fan-out, Idea Miner, Groq + Gemini model router).
 
-The service is strictly grounded in three distinct knowledge tiers:
-1. **The Public Web**: Real-time neural and keyword search (Tavily, Exa) and headless web crawling (Crawl4AI) with integrated prompt-injection sanitization.
-2. **Connected Enterprise Systems**: Read-only Model Context Protocol (MCP) clients with strict allowlists for Google Analytics 4 (GA4) and HubSpot CRM.
-3. **Per-Tenant Knowledge Base**: Hybrid dense (`pgvector` cosine similarity) and sparse keyword retrieval over uploaded client documents (PDF, DOCX, TXT) with PostgreSQL Row-Level Security (RLS) and shared global benchmarks.
-
-> **Supported Domain Profiles**:
-> 1. **Marketing Agency** (`config/domains/marketing.yaml`): Competitor teardowns, campaign briefs, performance audits, and paid media KPI computations.
-> 2. **Idea Miner** (`config/domains/idea_mining.yaml`): Continuous crawling and structuring of hackathon projects/winners, startup launches, and developer writeups with verified location evidence, semantic clustering, whitespace gap analysis, and grounded idea generation.
-> All domain behaviors reside in configuration files (`config/`) and modular skills (`skills/`), ensuring core agent logic remains domain-agnostic via request parameter `{"domain": "idea_mining"}`.
+Rather than separate fragmented tabs or tools, the system provides **ONE single conversational chat interface**:
+- The agent decides what to do dynamically (answer directly, run tools, trigger parallel deep research, or synthesize idea portfolios).
+- Connects to hundreds of operations through **Cloudflare Code Mode** (`search` + `execute`) running model-written JavaScript in sandboxed V8 isolates.
+- Remembers users and continuous work across conversations through **Layered Temporal Graph Memory (L0-L4)** and a bidirectional Obsidian-compatible markdown vault (`./vault`).
+- Live rich cards render inside the conversation: parallel research shard bars, verified scroll-to-text citation chips, collapsible code execution traces, inline clarification, mutation approval cards, and a collapsible right-side artifact drawer.
+- The legacy Streamlit/Gradio tab UI has been retired to `legacy/app.py`.
 
 ---
 
-## 📑 Table of Contents
-- [Architecture & Core Workflow](#-architecture--core-workflow)
-  - [High-Level Architectural Topology](#high-level-architectural-topology)
-  - [Complete 13-Stage Workflow](#complete-13-stage-workflow)
-  - [State Machine & Graph State Schema](#state-machine--graph-state-schema)
-- [Agentic Subsystems & Components](#-agentic-subsystems--components)
-- [Data Sources & MCP Integration Layer](#-data-sources--mcp-integration-layer)
-- [Multi-Tenancy, Storage & Database Architecture](#-multi-tenancy-storage--database-architecture)
-- [Sandboxed Code Execution & Skills Runtime](#-sandboxed-code-execution--skills-runtime)
-- [Quality Gates & Guardrails](#-quality-gates--guardrails)
-- [Observability, Telemetry & Cost Control](#-observability-telemetry--cost-control)
-- [Interactive Gradio Visualizer](#-interactive-gradio-visualizer)
-- [API Reference & Server-Sent Events (SSE)](#-api-reference--server-sent-events-sse)
-- [Idea Miner Domain Profile](#-idea-miner-domain-profile)
-- [Repository Structure & File Map](#-repository-structure--file-map)
-- [Getting Started & Local Setup](#-getting-started--local-setup)
-- [Verification & Test Suite](#-verification--test-suite)
+## 🏗️ Unified Architecture
+
+```mermaid
+graph TD
+    Browser["🖥️ Browser: Claude-style Next.js Chat UI (apps/web)"]
+    API["⚡ FastAPI Gateway: /v1/chat (SSE Streaming, RLS, Tenant)"]
+    Agent["🧠 Main Agent (LangGraph): Intent Router + Tool Loop"]
+    CodeMode["🛡️ Cloudflare Code Mode: Worker MCP (search, execute)"]
+    Gate["🚪 Supervisor Security Gate (Out-of-Sandbox Allowlist + Credential Injection)"]
+    Memory["🧬 Temporal Graph Memory (L0 Working, L1 Episodic, L2 Temporal KG, L3 Obsidian Vault, L4 Evidence)"]
+    Engine["⚙️ Autonomous Engines: Deep Research Graph, Fan-Out Workers, SearXNG, Idea Miner"]
+
+    Browser <-->|SSE Typed Events / POST /v1/chat| API
+    API <--> Agent
+    Agent <-->|Memory Recall & Remember| Memory
+    Agent <-->|search & execute| CodeMode
+    CodeMode --> Gate
+    Gate --> Engine
+    Memory <-->|Bidirectional Sync| Vault["📁 Obsidian Markdown Vault (./vault)"]
+```
 
 ---
 
-## 🏗️ Architecture & Core Workflow
+## ⚡ 10-Minute Quickstart
 
-### High-Level Architectural Topology
+### Prerequisites
+- Python 3.12+ (tested on Python 3.12 and 3.14 on Windows & Linux)
+- Node.js v20+ & npm (Node v24.12.0 verified)
+- Docker & Docker Compose (optional for full containerized stack)
+
+### 1. Configure Environment
+```bash
+cp .env.example .env
+```
+Ensure your API keys are added in `.env` (`GROQ_API_KEY`, `GEMINI_API_KEY`). By default, `CODEMODE_BACKEND=local` enables offline sandboxed code execution without requiring paid cloud workers.
+
+### 2. Run the Full Stack with Docker Compose
+```bash
+docker compose up --build
+```
+- Web UI (Claude-style Chat): [http://localhost:3000](http://localhost:3000)
+- Memory Graph Explorer: [http://localhost:3000/memory](http://localhost:3000/memory)
+- FastAPI Gateway Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+- Langfuse Observability: [http://localhost:3001](http://localhost:3001)
+
+### 3. Run Locally (Windows PowerShell)
+```powershell
+# Terminal 1: FastAPI Backend
+uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2: Next.js Chat UI
+cd apps/web
+npm install
+npm run dev
+```
+
+### 4. Run All Automated Tests
+```powershell
+python -m pytest tests/test_scaffold.py tests/test_chat_backend.py tests/test_codemode_gate.py tests/test_codemode_backend.py tests/test_memory_graph.py tests/test_e2e_chat.py -v
+```
+
 
 ```mermaid
 graph TD
