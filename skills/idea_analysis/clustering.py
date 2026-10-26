@@ -5,9 +5,6 @@ import math
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-from core.ideas.schemas import IdeaRecord
-
-
 class ClusterResult(BaseModel):
     cluster_id: int
     name: str
@@ -16,6 +13,9 @@ class ClusterResult(BaseModel):
     top_domains: List[str] = Field(default_factory=list)
     top_tech: List[str] = Field(default_factory=list)
     sample_size: int = 0
+
+
+from core.ideas.schemas import IdeaRecord
 
 
 def cosine_distance(v1: List[float], v2: List[float]) -> float:

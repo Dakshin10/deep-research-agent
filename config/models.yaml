@@ -47,6 +47,24 @@ roles:
     temperature: 0.2
     max_tokens: 2000
 
+  fast:
+    provider: "groq"
+    model: "llama-3.3-70b-versatile"
+    temperature: 0.1
+    max_tokens: 1500
+
+  strong:
+    provider: "gemini"
+    model: "gemini-2.5-flash"
+    temperature: 0.2
+    max_tokens: 4000
+
+  code:
+    provider: "groq"
+    model: "llama-3.3-70b-versatile"
+    temperature: 0.0
+    max_tokens: 2500
+
 timeouts:
   worker_seconds: 90
   overall_seconds: 600
