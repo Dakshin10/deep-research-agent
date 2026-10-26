@@ -9,3 +9,8 @@ __pycache__/
 *.db-wal
 artifacts_storage/
 test_*.db*
+node_modules/
+.next/
+dist/
+.wrangler/
+
