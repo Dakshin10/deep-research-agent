@@ -108,6 +108,7 @@ class ApprovalRequestEvent(BaseChatEvent):
     action_id: str
     description: str
     payload: Dict[str, Any] = Field(default_factory=dict)
+    token: Optional[str] = None
 
 
 class MemoryUsedEvent(BaseChatEvent):

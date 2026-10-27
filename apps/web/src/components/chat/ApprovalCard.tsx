@@ -15,7 +15,7 @@ export function ApprovalCard({
 
   const handleApprove = () => {
     setDecided('approved');
-    onDecision(true, `approval_token_${approval.action_id}`);
+    onDecision(true, approval.token || `approval_token_${approval.action_id}`);
   };
 
   const handleDeny = () => {

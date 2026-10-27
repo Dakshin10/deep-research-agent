@@ -32,6 +32,22 @@ class MockLLM:
     def _get_mock_content(self, messages: Any) -> str:
         prompt_text = str(messages)
         if self.role == "classifier":
+            if "User Prompt:" in prompt_text:
+                user_msg = prompt_text.split("User Prompt:")[-1].split("JSON:")[0].strip()
+                from core.chat.classifier import IntentClassifier
+                temp_clf = IntentClassifier()
+                fp = temp_clf.fast_path(user_msg)
+                if fp:
+                    route, conf, meta = fp
+                else:
+                    route, conf, meta = temp_clf.heuristic_semantic_fallback(user_msg)
+                return json.dumps({
+                    "route": route,
+                    "confidence": 0.95,
+                    "reasoning": "Mock semantic classification",
+                    "sub_action": meta.get("action"),
+                })
+
             user_query = prompt_text.split("User Query:")[-1].lower() if "User Query:" in prompt_text else prompt_text.lower()
             if any(w in user_query for w in ["hello", "how are you", "who are you", "hi "]):
                 return '{"mode": "chit_chat", "confidence": 1.0, "reply": "Hello! I am your Deep Research AI assistant."}'

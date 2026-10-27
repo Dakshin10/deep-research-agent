@@ -112,6 +112,7 @@ export function useChatStream({
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
+          buffer = buffer.replace(/\r\n/g, '\n');
           const lines = buffer.split('\n\n');
           buffer = lines.pop() || '';
 

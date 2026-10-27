@@ -201,17 +201,32 @@ async def test_scenario_7_go_private_and_export_vault(agent):
 
 @pytest.mark.asyncio
 async def test_scenario_8_switch_model_and_settings(agent):
-    """Scenario 8: 'switch to the faster model' or 'open settings' -> handled through UI actions."""
-    events = []
+    """Scenario 8: 'switch to the faster model' -> ui.switch_model; 'open settings' -> ui.open_settings."""
+    # A: switch to faster model
+    events_switch = []
     async for ev in agent.execute_turn(
-        conversation_id="conv_settings",
+        conversation_id="conv_model_switch",
         user_message="switch to the faster model",
     ):
-        events.append(ev)
+        events_switch.append(ev)
 
-    ui_settings = [e for e in events if isinstance(e, UIActionEvent)]
+    ui_switch = [e for e in events_switch if isinstance(e, UIActionEvent)]
+    assert len(ui_switch) > 0
+    assert ui_switch[0].action == "ui.switch_model"
+    assert ui_switch[0].payload.get("model_role") == "fast"
+
+    # B: open settings
+    events_settings = []
+    async for ev in agent.execute_turn(
+        conversation_id="conv_settings",
+        user_message="open settings",
+    ):
+        events_settings.append(ev)
+
+    ui_settings = [e for e in events_settings if isinstance(e, UIActionEvent)]
     assert len(ui_settings) > 0
     assert ui_settings[0].action == "ui.open_settings"
+
 
 
 @pytest.mark.asyncio

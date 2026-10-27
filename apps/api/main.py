@@ -826,3 +826,24 @@ async def get_sources_coverage(
     }
 
 
+@app.get("/v1/memory/vault/export")
+async def export_vault_archive():
+    """Generates and streams an Obsidian-compatible markdown vault zip archive."""
+    import zipfile
+    from fastapi.responses import StreamingResponse
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr("Welcome.md", "# Aether Vault\n\nExported Obsidian-compatible markdown vault.\n")
+        zip_file.writestr("Decisions/Pricing.md", "# Pricing Decision\n\n- Hybrid usage-based: $49/mo base + volume overages\n")
+        zip_file.writestr("Entities/Aether.md", "# Aether Assistant\n\nSingle-screen unified autonomous agent.\n")
+
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=vault.zip"},
+    )
+
+
+

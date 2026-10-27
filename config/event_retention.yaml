@@ -1,0 +1,5 @@
+# Event retention policy for server-side durable event logs
+event_retention:
+  retention_days: 30
+  auto_purge: true
+  max_events_per_conversation: 5000

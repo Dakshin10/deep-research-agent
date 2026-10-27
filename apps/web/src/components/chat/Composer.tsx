@@ -138,6 +138,8 @@ export function Composer({
         type="file"
         multiple
         className="hidden"
+        aria-label="Upload files or attachments"
+        title="Upload files"
         onChange={handleFileChange}
       />
 

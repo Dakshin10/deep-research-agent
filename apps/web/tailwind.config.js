@@ -7,14 +7,14 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: "#09090b",
-        surface: "#121214",
-        "surface-raised": "#18181b",
-        border: "#27272a",
-        "border-hover": "#3f3f46",
-        foreground: "#f4f4f5",
-        muted: "#a1a1aa",
-        "muted-dark": "#71717a",
+        background: "var(--background)",
+        surface: "var(--surface)",
+        "surface-raised": "var(--surface-raised)",
+        border: "var(--border)",
+        "border-hover": "var(--border-hover)",
+        foreground: "var(--foreground)",
+        muted: "var(--muted)",
+        "muted-dark": "var(--muted)",
       },
       fontFamily: {
         sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],

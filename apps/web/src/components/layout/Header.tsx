@@ -81,12 +81,12 @@ export function Header({
           className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full transition-all border ${
             incognito
               ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-800 font-medium'
-              : 'text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300 border-transparent hover:bg-stone-200/60 dark:hover:bg-stone-800'
+              : 'text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-100 border-stone-200/60 dark:border-stone-800 hover:bg-stone-200/60 dark:hover:bg-stone-800'
           }`}
           title={incognito ? 'Private mode is ON (no memory recorded)' : 'Turn on Private Mode'}
         >
           {incognito ? <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> : <Shield className="w-3.5 h-3.5" />}
-          <span className="hidden md:inline text-[11px]">{incognito ? 'Private' : 'Normal'}</span>
+          <span className="hidden md:inline text-[11px] font-medium">{incognito ? 'Private' : 'Normal'}</span>
         </button>
 
         {/* '...' Overflow Menu */}

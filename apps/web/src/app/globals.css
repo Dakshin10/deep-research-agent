@@ -2,13 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root, html.dark {
   --background: #09090b;
   --surface: #121214;
   --surface-raised: #18181b;
   --border: #27272a;
+  --border-hover: #3f3f46;
   --foreground: #f4f4f5;
   --muted: #a1a1aa;
+}
+
+html.light {
+  --background: #fbfbfb;
+  --surface: #ffffff;
+  --surface-raised: #f4f4f5;
+  --border: #e4e4e7;
+  --border-hover: #d4d4d8;
+  --foreground: #18181b;
+  --muted: #71717a;
 }
 
 body {

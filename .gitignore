@@ -16,4 +16,5 @@ dist/
 vault/
 test_vault_*/
 *.tsbuildinfo
-
+test-results/
+playwright-report/

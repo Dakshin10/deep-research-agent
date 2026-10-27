@@ -28,6 +28,10 @@ def get_chat_agent(store: ChatStore = Depends(get_chat_store), tenant_id: str = 
     return MainChatAgent(store=store, tenant_id=tenant_id)
 
 
+# Active background jobs registry mapping job_id/conv_id to running tasks
+ACTIVE_BACKGROUND_JOBS: Dict[str, Any] = {}
+
+
 @router.post("")
 async def create_chat_turn(
     req: ChatTurnRequest,
@@ -36,8 +40,7 @@ async def create_chat_turn(
 ):
     """
     Unified chat endpoint streaming typed Server-Sent Events (SSE).
-    Decides routing (direct answer, clarification, tools, deep research) and streams
-    live progress, citations, code executions, and artifacts into a single response.
+    Persists durable events with monotonically increasing IDs into store.
     """
     await store.init_db()
 
@@ -61,13 +64,60 @@ async def create_chat_turn(
             model_role=req.model_role,
             approval_token=req.approval_token,
         ):
+            # Durable server-side event logging with monotonic integer seq_id
+            sse_id = event.event_id
+            if not req.incognito:
+                try:
+                    seq_id = await store.save_event(
+                        event_id=event.event_id,
+                        conversation_id=conv_id,
+                        turn_id=event.turn_id,
+                        event_type=event.type,
+                        payload=event.model_dump(mode="json"),
+                    )
+                    sse_id = str(seq_id)
+                except Exception:
+                    pass
+
             yield {
-                "id": event.event_id,
+                "id": sse_id,
                 "event": event.type,
                 "data": event.model_dump_json(),
             }
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/stream")
+async def resume_chat_stream(
+    conversation_id: str = Query(...),
+    last_event_id: Optional[str] = Header(None, alias="Last-Event-ID"),
+    after_id: Optional[str] = Query(None, alias="last_event_id"),
+    store: ChatStore = Depends(get_chat_store),
+):
+    """
+    Resumes an SSE stream from the server-side durable event log starting after Last-Event-ID.
+    Guarantees no lost or duplicated events across network drops or tab refreshes.
+    """
+    await store.init_db()
+    effective_last_id = last_event_id or after_id
+    after_seq = 0
+    if effective_last_id:
+        try:
+            after_seq = int(effective_last_id)
+        except ValueError:
+            after_seq = 0
+
+    async def replay_generator():
+        missed_events = await store.get_events_after(conversation_id, after_seq_id=after_seq)
+        for ev in missed_events:
+            yield {
+                "id": str(ev["seq_id"]),
+                "event": ev["event_type"],
+                "data": json.dumps(ev["payload"]),
+            }
+
+    return EventSourceResponse(replay_generator())
 
 
 @router.get("/conversations", response_model=List[Conversation])

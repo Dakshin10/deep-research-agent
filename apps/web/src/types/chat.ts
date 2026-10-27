@@ -57,6 +57,7 @@ export interface ApprovalItem {
   action_id: string;
   description: string;
   payload: Record<string, any>;
+  token?: string;
 }
 
 export interface MemoryUsedItem {

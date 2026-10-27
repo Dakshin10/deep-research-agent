@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
@@ -14,7 +14,7 @@ import { Composer } from '@/components/chat/Composer';
 import { useChatStream } from '@/hooks/useChatStream';
 import { Conversation, ArtifactItem } from '@/types/chat';
 
-export default function SingleScreenAssistantPage() {
+function AssistantContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -39,6 +39,7 @@ export default function SingleScreenAssistantPage() {
   const [memoryOpen, setMemoryOpen] = useState(overlayParam === 'memory');
   const [sourcesOpen, setSourcesOpen] = useState(overlayParam === 'sources');
   const [artifactDrawerOpen, setArtifactDrawerOpen] = useState(overlayParam === 'artifact');
+  const [activeModelRole, setActiveModelRole] = useState<string | undefined>(undefined);
 
   // Handle natural language UI actions from the agent
   const handleUIAction = useCallback((action: string, payload: any) => {
@@ -54,6 +55,11 @@ export default function SingleScreenAssistantPage() {
         break;
       case 'ui.open_settings':
         setSettingsOpen(true);
+        break;
+      case 'ui.switch_model':
+        if (payload?.model_role) {
+          setActiveModelRole(payload.model_role);
+        }
         break;
       case 'ui.set_private_mode':
         setIncognito(!!payload?.private);
@@ -160,11 +166,21 @@ export default function SingleScreenAssistantPage() {
     let convId = activeConvId;
     if (!convId) {
       convId = `conv_${Date.now()}`;
-      handleNewChat();
+      setActiveConvId(convId);
+      const newConv: Conversation = {
+        id: convId,
+        title: 'New Inquiry',
+        tenant_id: 'default_tenant',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        is_archived: false,
+      };
+      setConversations((prev) => [newConv, ...prev]);
     }
     sendMessage({
       conversationId: convId,
       message: text,
+      modelRole: activeModelRole,
       incognito,
     });
   };
@@ -188,6 +204,7 @@ export default function SingleScreenAssistantPage() {
       sendMessage({
         conversationId: activeConvId,
         message: 'Proceed with approved action.',
+        modelRole: activeModelRole,
         incognito,
         approvalToken: token,
       });
@@ -302,5 +319,13 @@ export default function SingleScreenAssistantPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function SingleScreenAssistantPage() {
+  return (
+    <Suspense fallback={<div className="h-screen w-screen bg-stone-50 dark:bg-stone-950" />}>
+      <AssistantContent />
+    </Suspense>
   );
 }

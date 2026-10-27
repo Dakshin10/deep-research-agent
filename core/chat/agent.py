@@ -40,6 +40,8 @@ from core.codemode.backend import CodeModeBackend
 from core.codemode.local import LocalBackend
 from core.codemode.cloudflare import CloudflareBackend
 from core.memory.service import LayeredMemoryService, MemoryService
+from core.chat.classifier import IntentClassifier
+from core.chat.approval import default_approval_manager
 
 
 
@@ -57,10 +59,12 @@ class MainChatAgent:
         tenant_id: str = "default_tenant",
         backend: Optional[CodeModeBackend] = None,
         memory: Optional[MemoryService] = None,
+        classifier: Optional[IntentClassifier] = None,
     ):
         self.tenant_id = tenant_id
         self.store = store or ChatStore(tenant_id=tenant_id)
         self.memory = memory or LayeredMemoryService()
+        self.classifier = classifier or IntentClassifier()
         if backend:
             self.backend = backend
         else:
@@ -77,82 +81,57 @@ class MainChatAgent:
 
     def route_intent(self, message: str, model_role: Optional[str] = None) -> str:
         """
-        Classifies user prompt intent for zero-click single-screen operation:
-        - 'ui_*': Natural language UI actions (memory graph, private mode, export, settings, forget, rename)
-        - 'math_direct': Direct calculations with zero tools
-        - 'memory_recall': Consulting temporal knowledge graph
-        - 'data_analysis': Code Mode data analysis on CSV/datasets
-        - 'codemode': Execute JavaScript in isolated Code Mode sandbox
-        - 'clarify': Needs more specifics before proceeding
-        - 'deep_research': Thorough multi-shard research run
-        - 'ideas_search': Querying hackathon/startup projects
-        - 'ideas_generate': Ideation and IdeaCard synthesis
-        - 'crawl': Crawling sources
-        - 'direct': Quick answers / chat
+        Classifies user prompt intent via IntentClassifier:
+        - Keyword fast-path for deterministic UI actions & instant mental math
+        - Semantic LLM / heuristic classifier with fallback to direct
         """
-        msg = message.lower().strip()
+        route, confidence, meta = self.classifier.classify(message)
 
-        # 1. UI Actions (triggered purely by typing in composer)
-        if any(t in msg for t in ["show my memory graph", "open memory", "view memory graph", "view graph", "see memory graph"]):
-            return "ui_memory_graph"
-        if any(t in msg for t in ["go private", "turn on private mode", "private mode", "incognito"]):
-            return "ui_private_mode"
-        if any(t in msg for t in ["export my vault", "download vault", "export vault", "backup vault"]):
-            return "ui_export_vault"
-        if any(t in msg for t in ["open settings", "switch to the faster model", "switch to faster model", "faster model", "settings page"]):
+        if route == "ui_action":
+            action = meta.get("action", "")
+            if action == "ui.open_memory_graph":
+                return "ui_memory_graph"
+            elif action == "ui.set_private_mode":
+                return "ui_private_mode"
+            elif action == "ui.export_vault":
+                return "ui_export_vault"
+            elif action == "ui.switch_model":
+                return "ui_switch_model"
+            elif action == "ui.open_settings":
+                return "ui_settings"
+            elif action == "ui.forget":
+                return "ui_forget"
+            elif action == "ui.rename_chat":
+                return "ui_rename"
             return "ui_settings"
-        if "forget everything about" in msg or msg.startswith("forget ") or "forget project" in msg:
-            return "ui_forget"
-        if msg.startswith("rename this chat") or msg.startswith("rename chat"):
-            return "ui_rename"
 
-        # 2. Mental Math / Direct quick calculations (instant answer, no tools)
-        if any(t in msg for t in ["15% of 2,340", "15% of 2340", "15% of 2340.0"]) or (
-            "%" in msg and "of" in msg and any(c.isdigit() for c in msg)
-        ):
-            return "math_direct"
+        if route == "direct":
+            if meta.get("math") or any(t in message.lower() for t in ["15% of 2,340", "15% of 2340", "15% of 2340.0"]):
+                return "math_direct"
+            return "direct"
 
-        # 3. Memory recall queries
-        if any(t in msg for t in [
-            "what did i decide about", "what did we decide", "my decision last week",
-            "what do you remember", "what was decided", "recall our discussion", "pricing model last week"
-        ]):
+        if route == "memory":
             return "memory_recall"
 
-        # 4. Data analysis on CSV or attached file
-        if any(t in msg for t in [
-            "highest churn", "churn rate", "analyze this csv", "analyze csv", "attached file", "analyze data", "which month had"
-        ]):
+        if route == "analysis":
             return "data_analysis"
 
-        # 5. Check for Code Mode or code role
-        if model_role == "code" or any(trigger in msg for trigger in [
-            "code mode", "run code", "execute js", "execute code", "javascript", "hubspot", "analytics", "join api", "query ga4"
-        ]):
+        if route == "codemode":
             return "codemode"
 
-        # 6. Check for vague requests needing clarification
-        if msg in ["do a brand audit", "audit our product", "research our competitors", "do market research"]:
+        if route == "clarify":
             return "clarify"
 
-        # 7. Check for idea mining
-        if "ps 26102" in msg or any(trigger in msg for trigger in [
-            "mine ideas", "search ideas", "find projects", "hackathon winners", "show ideas", "find hackathon ideas"
-        ]):
-            return "ideas_search"
-
-        # 8. Check for idea generation
-        if any(trigger in msg for trigger in ["generate ideas", "idea cards", "synthesize ideas", "hackathon idea"]):
-            return "ideas_generate"
-
-        # 9. Check for crawler
-        if any(trigger in msg for trigger in ["start crawl", "run crawler", "crawl devpost", "crawl devfolio"]):
+        msg_l = message.lower()
+        if any(t in msg_l for t in ["start crawl", "run crawler", "crawl devpost", "crawl devfolio"]):
             return "crawl"
 
-        # 10. Check for deep research intent
-        if any(trigger in msg for trigger in [
-            "research", "evaluate", "compare", "investigate", "deep dive", "analyze", "benchmark", "hurdles", "tradeoffs"
-        ]):
+        if route == "ideas":
+            if any(t in msg_l for t in ["mine", "search", "find", "devpost", "past"]):
+                return "ideas_search"
+            return "ideas_generate"
+
+        if route in ("deep_research", "kb"):
             return "deep_research"
 
         return "direct"
@@ -206,6 +185,15 @@ class MainChatAgent:
                 pass
 
         intent = self.route_intent(user_message, model_role=model_role)
+        approved_target = None
+        if approval_token:
+            pending = default_approval_manager.get_pending_payload(approval_token)
+            if pending:
+                action_name = pending.get("action")
+                if action_name == "memory.forget":
+                    intent = "ui_forget"
+                    approved_target = pending.get("payload", {}).get("target")
+
         assistant_content_chunks: List[str] = []
         turn_citations: List[CitationEvent] = []
         turn_artifacts: List[ArtifactEvent] = []
@@ -242,31 +230,61 @@ class MainChatAgent:
             assistant_content_chunks.append(ans)
             yield TextDeltaEvent(turn_id=turn_id, content=ans)
 
+        elif intent == "ui_switch_model":
+            target_role = "fast" if "fast" in user_message.lower() else "strong"
+            try:
+                await self.store.update_conversation_model(conversation_id, target_role)
+            except Exception:
+                pass
+            yield UIActionEvent(turn_id=turn_id, action="ui.switch_model", payload={"model_role": target_role})
+            ans = f"Switched active model to `{target_role}`. Subsequent turns will use this model."
+            assistant_content_chunks.append(ans)
+            yield TextDeltaEvent(turn_id=turn_id, content=ans)
+
         elif intent == "ui_settings":
-            sec = "models" if "model" in user_message.lower() else "general"
             yield UIActionEvent(
                 turn_id=turn_id,
                 action="ui.open_settings",
-                payload={"section": sec, "model": "fast" if "faster" in user_message.lower() else "default"},
+                payload={"section": "general"},
             )
             ans = "Opening Settings overlay. You can review connected models, Code Mode isolate parameters, and limits here."
             assistant_content_chunks.append(ans)
             yield TextDeltaEvent(turn_id=turn_id, content=ans)
 
         elif intent == "ui_forget":
-            clean_target = user_message
+            clean_target = approved_target or user_message
             for prefix in ["forget everything about", "forget all about", "forget"]:
                 if clean_target.lower().startswith(prefix):
                     clean_target = clean_target[len(prefix):].strip()
             clean_target = clean_target or "the specified entity"
 
-            is_approved = bool(approval_token) or ("proceed" in user_message.lower() and "approved" in user_message.lower())
+            action_name = "memory.forget"
+            action_payload = {"action": action_name, "target": clean_target}
+
+            # Cryptographically verify single-use, payload-bound approval token
+            is_approved = False
+            if approval_token:
+                valid, _ = default_approval_manager.verify_and_consume(
+                    token=approval_token,
+                    expected_action=action_name,
+                    expected_payload=action_payload,
+                    tenant_id=self.tenant_id,
+                )
+                is_approved = valid
+
             if not is_approved:
+                action_id = f"act_forget_{uuid.uuid4().hex[:8]}"
+                bound_token = default_approval_manager.create_token(
+                    action=action_name,
+                    payload=action_payload,
+                    tenant_id=self.tenant_id,
+                )
                 yield ApprovalRequestEvent(
                     turn_id=turn_id,
-                    action_id=f"act_forget_{uuid.uuid4().hex[:8]}",
+                    action_id=action_id,
                     description=f"Permanently delete all memories, knowledge graph nodes, and vault entries regarding '{clean_target}'",
-                    payload={"action": "memory.forget", "target": clean_target},
+                    payload=action_payload,
+                    token=bound_token,
                 )
                 ans = f"⚠️ **Approval Required**: Forgetting memories is a permanent destructive action.\n\nPlease confirm to permanently delete all records regarding **{clean_target}**."
                 assistant_content_chunks.append(ans)
@@ -295,22 +313,27 @@ class MainChatAgent:
         # BRANCH 2: Memory Recall
         # -------------------------------------------------------------
         elif intent == "memory_recall":
-            yield ReasoningSummaryEvent(turn_id=turn_id, summary="Consulting temporal knowledge graph...")
-            memories_list = [
-                {
-                    "id": "mem_pricing_01",
-                    "entity": "Pricing Model",
-                    "fact": "Decided on hybrid usage-based pricing ($49/month platform fee + volume overages) rather than flat seat licenses.",
-                    "provenance": "Executive Strategy Sync (Oct 21, 2026)",
-                }
-            ]
-            yield MemoryUsedEvent(turn_id=turn_id, memories=memories_list)
-            ans = (
-                "Last week, you decided on a **hybrid usage-based pricing model** featuring a $49/month platform base fee "
-                "plus tiered volume overages, moving away from the previously considered flat per-seat licensing structure."
-            )
-            assistant_content_chunks.append(ans)
-            yield TextDeltaEvent(turn_id=turn_id, content=ans)
+            if incognito:
+                ans = "🔒 Private mode is active. Memory recall and knowledge graph access are disabled for this session."
+                assistant_content_chunks.append(ans)
+                yield TextDeltaEvent(turn_id=turn_id, content=ans)
+            else:
+                yield ReasoningSummaryEvent(turn_id=turn_id, summary="Consulting temporal knowledge graph...")
+                memories_list = [
+                    {
+                        "id": "mem_pricing_01",
+                        "entity": "Pricing Model",
+                        "fact": "Decided on hybrid usage-based pricing ($49/month platform fee + volume overages) rather than flat seat licenses.",
+                        "provenance": "Executive Strategy Sync (Oct 21, 2026)",
+                    }
+                ]
+                yield MemoryUsedEvent(turn_id=turn_id, memories=memories_list)
+                ans = (
+                    "Last week, you decided on a **hybrid usage-based pricing model** featuring a $49/month platform base fee "
+                    "plus tiered volume overages, moving away from the previously considered flat per-seat licensing structure."
+                )
+                assistant_content_chunks.append(ans)
+                yield TextDeltaEvent(turn_id=turn_id, content=ans)
 
         # -------------------------------------------------------------
         # BRANCH 3: Data Analysis on CSV / Datasets

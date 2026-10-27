@@ -96,7 +96,23 @@ class ChatStore:
                     created_at TEXT NOT NULL
                 )
             """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS chat_events (
+                    seq_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT UNIQUE NOT NULL,
+                    tenant_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL,
+                    turn_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """)
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_chat_events_conv_seq ON chat_events(conversation_id, seq_id)
+            """)
             await db.commit()
+
 
     async def create_conversation(self, title: str = "New Research Chat", metadata: Optional[Dict[str, Any]] = None) -> Conversation:
         conv = Conversation(tenant_id=self.tenant_id, title=title, metadata=metadata or {})
@@ -223,3 +239,75 @@ class ChatStore:
             )
             await db.commit()
             return res.rowcount > 0
+
+    async def save_event(
+        self,
+        event_id: str,
+        conversation_id: str,
+        turn_id: str,
+        event_type: str,
+        payload: Dict[str, Any],
+    ) -> int:
+        now_str = datetime.now(timezone.utc).isoformat()
+        payload_str = json.dumps(payload, default=str)
+        async with self._connection() as db:
+            cursor = await db.execute(
+                "INSERT INTO chat_events (event_id, tenant_id, conversation_id, turn_id, event_type, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (event_id, self.tenant_id, conversation_id, turn_id, event_type, payload_str, now_str),
+            )
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_events_after(
+        self,
+        conversation_id: str,
+        after_seq_id: int = 0,
+    ) -> List[Dict[str, Any]]:
+        async with self._connection() as db:
+            cursor = await db.execute(
+                "SELECT seq_id, event_id, tenant_id, conversation_id, turn_id, event_type, payload, created_at FROM chat_events WHERE conversation_id = ? AND tenant_id = ? AND seq_id > ? ORDER BY seq_id ASC",
+                (conversation_id, self.tenant_id, after_seq_id),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "seq_id": r[0],
+                    "event_id": r[1],
+                    "tenant_id": r[2],
+                    "conversation_id": r[3],
+                    "turn_id": r[4],
+                    "event_type": r[5],
+                    "payload": json.loads(r[6]),
+                    "created_at": r[7],
+                }
+                for r in rows
+            ]
+
+    async def purge_old_events(self, retention_days: int = 30) -> int:
+        from datetime import timedelta
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        cutoff_str = cutoff.isoformat()
+        async with self._connection() as db:
+            cursor = await db.execute(
+                "DELETE FROM chat_events WHERE created_at < ?",
+                (cutoff_str,),
+            )
+            await db.commit()
+            return cursor.rowcount
+
+    async def update_conversation_model(self, conversation_id: str, model_role: str) -> None:
+        async with self._connection() as db:
+            cursor = await db.execute(
+                "SELECT metadata FROM conversations WHERE id = ? AND tenant_id = ?",
+                (conversation_id, self.tenant_id),
+            )
+            row = await cursor.fetchone()
+            meta = json.loads(row[0]) if row and row[0] else {}
+            meta["model_role"] = model_role
+            now_str = datetime.now(timezone.utc).isoformat()
+            await db.execute(
+                "UPDATE conversations SET metadata = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
+                (json.dumps(meta), now_str, conversation_id, self.tenant_id),
+            )
+            await db.commit()
+
