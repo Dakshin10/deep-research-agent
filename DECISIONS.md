@@ -826,3 +826,24 @@ tests/test_phase7_idea_miner_acceptance.py .. [100%]
 ### 24.3 Concurrency & StateStore Hardening
 - **Task Lock on `StateStore.get_notes`**: In concurrent asynchronous test workflows (e.g. `test_3_competitor_deep_research_workflow`), reads to in-memory SQLite tables could race against in-flight worker note commits. Synchronized `get_notes` with `self._task_lock`, eliminating race conditions and ensuring 100% deterministic persistence validation across the full 121-test suite.
 
+---
+
+## 25. Unified AI Assistant, Cloudflare Code Mode & Graph Memory (PLAN3)
+
+### 25.1 Architecture Transition
+- **From Tab-Based Prototype to Single Chat Interface**: Transitioned from multi-tab Streamlit/Gradio prototype to a unified Claude-style chat application. Features (deep research, crawler control, idea search/generation, analytics joins, memory inspector) no longer exist in disconnected views; they appear dynamically as rich inline components or in the collapsible right-side artifact drawer.
+- **Legacy Prototype Preservation**: Preserved previous multi-tab application under `legacy/app.py` for backward reference.
+
+### 25.2 Key Technology Selections
+1. **Frontend (`apps/web`)**: Next.js 14+ (App Router), TypeScript, TailwindCSS, and shadcn/ui primitives. Custom SSE stream adapter (`useChatStream`) handles typed server events. Justified in `docs/adr/0001-ui.md`.
+2. **Tool Execution Layer (`apps/codemode`, `core/codemode`)**: Cloudflare Code Mode (`search` + `execute`). Dynamic Worker V8 isolates with `globalOutbound: null` and supervisor host security gate enforcing allowlists and secret fencing. Abstracted behind `CodeModeBackend` with dual `CloudflareBackend` and `LocalBackend` implementations. Justified in `docs/adr/0003-codemode.md`.
+3. **Layered Memory (`core/memory`)**: 5-tier architecture:
+   - **L0 Working**: Active conversation state and rolling summaries.
+   - **L1 Episodic**: Timestamped historical episodes with embeddings.
+   - **L2 Semantic Temporal Knowledge Graph**: Entities, relations, valid time intervals (`valid_from`/`valid_to`), non-destructive contradiction handling.
+   - **L3 Obsidian Vault**: Plain `./vault` markdown notes with `[[wikilinks]]` and bidirectional file watching (`watchfiles`).
+   - **L4 Evidence Graph**: Direct edge links to verified `ResearchNote` and `IdeaRecord` nodes.
+   Justified in `docs/adr/0002-memory.md`.
+4. **Agent Backend (`core/chat`)**: LangGraph Main Chat Agent streaming typed SSE events over `POST /v1/chat`. PII fence (`config/memory_policy.yaml`) and prompt injection fences (`<untrusted_tool_result>`) strictly enforced across all tool executions.
+
+

@@ -421,8 +421,8 @@ def format_source_coverage_html(coverage: Dict[str, int]) -> str:
     for fam, count in coverage.items():
         pct = round((count / total) * 100, 1)
         html += f"""
-        <div style="background: #121214; border: 1px solid #27272a; border-radius: 8px; padding: 12px 16px; flex: 1 1 140px; min-width: 140px;">
-            <div style="font-size: 11px; text-transform: uppercase; color: #71717a; font-weight: 600; margin-bottom: 4px;">{fam.replace('_', ' ')}</div>
+        <div data-family="{fam}" style="background: #121214; border: 1px solid #27272a; border-radius: 8px; padding: 12px 16px; flex: 1 1 140px; min-width: 140px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #71717a; font-weight: 600; margin-bottom: 4px;">{fam}</div>
             <div style="font-size: 22px; font-weight: 800; color: #ffffff; font-family: 'JetBrains Mono', monospace;">
                 {count} <span style="font-size: 12px; color: #71717a; font-weight: 400;">({pct}%)</span>
             </div>
@@ -504,9 +504,29 @@ def format_reflection_html(reflection_obj: Any) -> str:
 # -----------------------------------
 # AGENT RESEARCH WORKFLOW RUNNER
 # -----------------------------------
+class AgentRunResult(dict):
+    """Result dictionary that also supports legacy tuple unpacking of Gradio components."""
+    def __iter__(self):
+        s_html = format_shards_panel_html(self.get("shards_data", []))
+        c_html = format_source_coverage_html(self.get("coverage_data", {}))
+        e_html = format_evidence_table_html(self.get("evidence_data", []))
+        return iter([
+            self.get("final_answer", ""),
+            s_html,
+            c_html,
+            e_html,
+            self.get("initial_answer", ""),
+            self.get("reflection_html", ""),
+            self.get("search_queries", ""),
+        ])
+
+    def __len__(self):
+        return 7
+
+
 def run_agent(question: str) -> Dict[str, Any]:
     if not question.strip():
-        return {
+        return AgentRunResult({
             "final_answer": "### Please enter a question to start the research process.",
             "shards_data": [],
             "coverage_data": {},
@@ -514,7 +534,7 @@ def run_agent(question: str) -> Dict[str, Any]:
             "initial_answer": "",
             "reflection_html": "<div style='color: #71717a;'>No reflection available.</div>",
             "search_queries": "",
-        }
+        })
 
     clean_term = urllib.parse.quote(question[:30])
 
@@ -620,7 +640,7 @@ Parallel research completed across 5 active shards with exact document location 
         """
         search_queries = f"- {question} overview\n- {question} benchmarks\n- {question} implementation patterns"
 
-    return {
+    return AgentRunResult({
         "final_answer": final_answer,
         "shards_data": shards_data,
         "coverage_data": coverage_data,
@@ -628,7 +648,7 @@ Parallel research completed across 5 active shards with exact document location 
         "initial_answer": init_answer,
         "reflection_html": reflection_html,
         "search_queries": search_queries,
-    }
+    })
 
 
 # -----------------------------------

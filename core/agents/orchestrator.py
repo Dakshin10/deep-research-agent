@@ -174,7 +174,8 @@ class ResearchOrchestrator:
             job.plan = plan
             await self.state_store.update_job(job)
 
-        return all_notes
+        persisted = await self.state_store.get_notes(job_id)
+        return persisted if persisted else all_notes
 
     async def _execute_shard(
         self,
