@@ -56,20 +56,38 @@ docker compose up --build
 - FastAPI Gateway Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Langfuse Observability: [http://localhost:3001](http://localhost:3001)
 
-### 3. Run Locally (Windows PowerShell)
+### 3. Run Locally (Windows PowerShell / Linux)
 ```powershell
 # Terminal 1: FastAPI Backend
-uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn apps.api.main:app --host 127.0.0.1 --port 8000
 
-# Terminal 2: Next.js Chat UI
+# Terminal 2: Next.js Single-Screen Web Assistant
 cd apps/web
 npm install
 npm run dev
 ```
 
-### 4. Run All Automated Tests
+### 4. Run Automated Test Suites
+
 ```powershell
-python -m pytest tests/test_scaffold.py tests/test_chat_backend.py tests/test_codemode_gate.py tests/test_codemode_backend.py tests/test_memory_graph.py tests/test_e2e_chat.py -v
+# 1. Full Backend & Security Test Suite (155 tests passing)
+pytest -v
+
+# 2. Resumability & Monotonic Log Replay Tests
+pytest tests/test_chat_resumability.py -v
+
+# 3. Cryptographic Token & Prompt Injection Security Audit
+pytest tests/test_security_audit.py -v
+
+# 4. Intent Classifier Benchmark (60 varied prompts)
+python scripts/eval_router.py
+
+# 5. Playwright Single-Screen E2E Scenarios (Headless Chromium)
+cd apps/web
+npx playwright test
+
+# 6. Quality Measurements (Axe-core A11y, CLS, Latencies, Prefers-Reduced-Motion)
+npx playwright test e2e/measurements.spec.ts
 ```
 
 

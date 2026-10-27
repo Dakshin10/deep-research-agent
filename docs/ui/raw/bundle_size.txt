@@ -1,0 +1,16 @@
+Next.js 14.2.35 Production Build Bundle Measurement
+Command: npm run build
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    16.9 kB         104 kB
+├ ○ /_not-found                          873 B          88.1 kB
+└ ○ /memory                              138 B          87.4 kB
++ First Load JS shared by all            87.3 kB
+  ├ chunks/117-c253625643dec215.js       31.7 kB
+  ├ chunks/fd9d1056-0d19444e3e44d8fd.js  53.6 kB
+  └ other shared chunks (total)          1.89 kB
+
+○  (Static)  prerendered as static content
+Total First Load JS for Single-Screen Assistant Route (/): 104 kB
+Shared Chunk Budget: 87.3 kB
+Route Component Bundle: 16.9 kB

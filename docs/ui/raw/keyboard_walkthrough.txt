@@ -1,0 +1,1 @@
+Keyboard walkthrough passed: History drawer opens and Esc closes. Natural language opens Memory Graph and Esc closes.
