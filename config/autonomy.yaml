@@ -1,0 +1,43 @@
+# Autonomy and Approval Policy Configuration
+version: "1.0"
+
+actions:
+  # Fast, read-only actions run immediately with zero friction
+  read_only:
+    require_approval: false
+    max_duration_seconds: 30
+    auto_start: true
+    tools:
+      - "api.web.search"
+      - "api.kb.search"
+      - "api.ideas.search"
+      - "api.memory.recall"
+      - "api.analytics.query"
+      - "api.papers.search"
+
+  # Heavy, long-running research jobs start automatically with a cancel affordance
+  long_running:
+    require_approval: false
+    auto_start: true
+    estimated_duration_notice: true
+    hard_budget_cost_cap_usd: 5.0
+    notify_message: "Started in background (~3-5 mins). You can continue chatting while this runs."
+    tools:
+      - "api.research.deep"
+      - "api.ideas.generate"
+
+  # Mutating actions that store data or modify external resources require explicit confirmation
+  mutating:
+    require_approval: true
+    approval_type: "inline_card"
+    tools:
+      - "api.crawl.start"
+      - "api.kb.upload"
+      - "api.memory.forget_all"
+      - "api.crm.mutate"
+      - "api.hrms.mutate"
+
+clarification:
+  max_questions: 1
+  threshold_waste_risk: "high"
+  default_action: "state_assumption_and_proceed"

@@ -11,11 +11,16 @@ import {
   ApprovalItem,
 } from '@/types/chat';
 
-export function useChatStream() {
+export function useChatStream({
+  onUIAction,
+}: {
+  onUIAction?: (action: string, payload: any) => void;
+} = {}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [activeArtifact, setActiveArtifact] = useState<ArtifactItem | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastEventIdRef = useRef<string | null>(null);
 
   const stopGeneration = useCallback(() => {
     if (abortControllerRef.current) {
@@ -115,10 +120,14 @@ export function useChatStream() {
 
             let eventType = 'message';
             let eventData = '';
+            let eventId = '';
 
             const partLines = chunk.split('\n');
             for (const line of partLines) {
-              if (line.startsWith('event: ')) {
+              if (line.startsWith('id: ')) {
+                eventId = line.replace('id: ', '').trim();
+                lastEventIdRef.current = eventId;
+              } else if (line.startsWith('event: ')) {
                 eventType = line.replace('event: ', '').trim();
               } else if (line.startsWith('data: ')) {
                 eventData = line.replace('data: ', '').trim();
@@ -172,6 +181,19 @@ export function useChatStream() {
 
                     case 'memory_used':
                       updated.memories_used = payload.memories || [];
+                      break;
+
+                    case 'ui_action':
+                      updated.ui_actions = [...(updated.ui_actions || []), payload];
+                      if (onUIAction) {
+                        onUIAction(payload.action, payload.payload);
+                      }
+                      break;
+
+                    case 'job_update':
+                      if (payload.artifact_id && payload.summary) {
+                        // Background job updated
+                      }
                       break;
 
                     case 'done':

@@ -122,6 +122,21 @@ class MemoryWriteProposedEvent(BaseChatEvent):
     confidence: float = 1.0
 
 
+class UIActionEvent(BaseChatEvent):
+    type: Literal["ui_action"] = "ui_action"
+    action: str  # e.g., ui.open_memory_graph, ui.open_sources, ui.open_artifact, ui.open_settings, ui.set_private_mode, ui.export_vault
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class JobUpdateEvent(BaseChatEvent):
+    type: Literal["job_update"] = "job_update"
+    job_id: str
+    status: str
+    progress_pct: float = 0.0
+    summary: Optional[str] = None
+    artifact_id: Optional[str] = None
+
+
 class ErrorEvent(BaseChatEvent):
     type: Literal["error"] = "error"
     message: str
@@ -148,6 +163,8 @@ ChatEvent = Union[
     ApprovalRequestEvent,
     MemoryUsedEvent,
     MemoryWriteProposedEvent,
+    UIActionEvent,
+    JobUpdateEvent,
     ErrorEvent,
     DoneEvent,
 ]
@@ -192,3 +209,4 @@ class ChatTurnRequest(BaseModel):
     model_role: Optional[str] = None  # fast, strong, code
     incognito: bool = False           # if True, disable memory read/write
     approval_token: Optional[str] = None
+    last_event_id: Optional[str] = None

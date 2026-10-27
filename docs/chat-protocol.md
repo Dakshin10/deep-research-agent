@@ -193,7 +193,43 @@ Emitted when a candidate memory was extracted from the conversation for user con
 }
 ```
 
-### 13. `error`
+### 13. `ui_action`
+Emitted when the agent initiates a client-side interface state change (opening an overlay, triggering export, or changing mode) purely from natural language.
+```json
+{
+  "type": "ui_action",
+  "turn_id": "turn_abc123",
+  "action": "ui.open_memory_graph",
+  "payload": {
+    "entity": "SolidStateBatteries",
+    "section": "graph"
+  }
+}
+```
+Supported actions:
+- `ui.open_memory_graph`: Opens the full-screen interactive memory canvas.
+- `ui.open_sources`: Opens the slide-over source citations sheet.
+- `ui.open_artifact`: Opens the right-hand panel for a specific artifact ID (`{"artifact_id": "art_123"}`).
+- `ui.open_settings`: Opens the settings sheet overlay (`{"section": "models" | "codemode"}`).
+- `ui.set_private_mode`: Toggles incognito mode on/off (`{"private": true}`).
+- `ui.export_vault`: Triggers download of the `./vault` zip bundle.
+- `ui.switch_backend`: Changes Code Mode backend (`{"backend": "local" | "cloudflare"}`).
+
+### 14. `job_update`
+Emitted when a background long-running job changes state or completes while the user is away or multi-tasking.
+```json
+{
+  "type": "job_update",
+  "turn_id": "turn_abc123",
+  "job_id": "job_deep_789",
+  "status": "completed",
+  "progress_pct": 100.0,
+  "summary": "Completed 5 shards and synthesized 12 verified notes.",
+  "artifact_id": "art_rep_999"
+}
+```
+
+### 15. `error`
 Emitted on fatal turn errors.
 ```json
 {
@@ -204,7 +240,7 @@ Emitted on fatal turn errors.
 }
 ```
 
-### 14. `done`
+### 16. `done`
 Emitted when the turn has completed and all parts are persisted.
 ```json
 {
@@ -215,3 +251,21 @@ Emitted when the turn has completed and all parts are persisted.
   "duration_seconds": 2.14
 }
 ```
+
+---
+
+## 3. Stream Resumability & Last-Event-ID
+
+To support page reloads, network hiccups, and multi-turn conversations where long background jobs run asynchronously:
+1. Every SSE message frame includes a sequential `id: <event_id>` line:
+   ```
+   id: evt_01h9x3k2
+   event: research_progress
+   data: {"type": "research_progress", ...}
+   ```
+2. When the browser reconnects, it sends the standard `Last-Event-ID` header:
+   ```
+   GET /v1/chat/stream?conversation_id=conv_123
+   Last-Event-ID: evt_01h9x3k2
+   ```
+3. The server replays any buffered events occurring after `Last-Event-ID`, restoring live status lines and background research shards without restarting the run.

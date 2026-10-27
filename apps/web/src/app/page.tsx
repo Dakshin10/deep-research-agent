@@ -1,19 +1,27 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Header } from '@/components/layout/Header';
+import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
+import { CommandPalette } from '@/components/layout/CommandPalette';
+import { SettingsOverlay } from '@/components/layout/SettingsOverlay';
+import { MemoryOverlay } from '@/components/memory/MemoryOverlay';
+import { SourcesSheet } from '@/components/citations/SourcesSheet';
+import { ArtifactDrawer } from '@/components/artifacts/ArtifactDrawer';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { Composer } from '@/components/chat/Composer';
-import { ArtifactDrawer } from '@/components/artifacts/ArtifactDrawer';
 import { useChatStream } from '@/hooks/useChatStream';
-import { Conversation } from '@/types/chat';
-import { PanelRight, RefreshCw, Trash2 } from 'lucide-react';
+import { Conversation, ArtifactItem } from '@/types/chat';
 
-export default function ChatPage() {
+export default function SingleScreenAssistantPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [conversations, setConversations] = useState<Conversation[]>([
     {
       id: 'default_conv',
-      title: 'New Research & Idea Session',
+      title: 'New Inquiry',
       tenant_id: 'default_tenant',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -21,9 +29,47 @@ export default function ChatPage() {
     },
   ]);
   const [activeConvId, setActiveConvId] = useState<string>('default_conv');
-  const [modelRole, setModelRole] = useState<string>('fast');
   const [incognito, setIncognito] = useState<boolean>(false);
-  const [drawerOpen, setDrawerOpen] = useState<boolean>(true);
+
+  // Overlay states (synchronized with URL query params)
+  const overlayParam = searchParams.get('overlay');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(overlayParam === 'settings');
+  const [memoryOpen, setMemoryOpen] = useState(overlayParam === 'memory');
+  const [sourcesOpen, setSourcesOpen] = useState(overlayParam === 'sources');
+  const [artifactDrawerOpen, setArtifactDrawerOpen] = useState(overlayParam === 'artifact');
+
+  // Handle natural language UI actions from the agent
+  const handleUIAction = useCallback((action: string, payload: any) => {
+    switch (action) {
+      case 'ui.open_memory_graph':
+        setMemoryOpen(true);
+        break;
+      case 'ui.open_sources':
+        setSourcesOpen(true);
+        break;
+      case 'ui.open_artifact':
+        setArtifactDrawerOpen(true);
+        break;
+      case 'ui.open_settings':
+        setSettingsOpen(true);
+        break;
+      case 'ui.set_private_mode':
+        setIncognito(!!payload?.private);
+        break;
+      case 'ui.export_vault':
+        handleExportVault();
+        break;
+      case 'ui.rename_chat':
+        if (payload?.title) {
+          setConversations((prev) =>
+            prev.map((c) => (c.id === activeConvId ? { ...c, title: payload.title } : c))
+          );
+        }
+        break;
+    }
+  }, [activeConvId]);
 
   const {
     messages,
@@ -33,7 +79,14 @@ export default function ChatPage() {
     setActiveArtifact,
     sendMessage,
     stopGeneration,
-  } = useChatStream();
+  } = useChatStream({ onUIAction: handleUIAction });
+
+  // Sync active artifact opening
+  useEffect(() => {
+    if (activeArtifact) {
+      setArtifactDrawerOpen(true);
+    }
+  }, [activeArtifact]);
 
   // Load conversations on mount
   useEffect(() => {
@@ -50,17 +103,36 @@ export default function ChatPage() {
           }
         }
       } catch (e) {
-        // Fallback to local default conversation if offline/mock
+        // Fallback to local default conversation if offline
       }
     }
     fetchConversations();
+  }, []);
+
+  // Global keyboard shortcuts (Cmd/Ctrl+K, Esc)
+  useEffect(() => {
+    function handleGlobalKeys(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        setHistoryOpen(false);
+        setCommandPaletteOpen(false);
+        setSettingsOpen(false);
+        setMemoryOpen(false);
+        setSourcesOpen(false);
+        setArtifactDrawerOpen(false);
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeys);
+    return () => window.removeEventListener('keydown', handleGlobalKeys);
   }, []);
 
   const handleNewChat = useCallback(() => {
     const newId = `conv_${Date.now()}`;
     const newConv: Conversation = {
       id: newId,
-      title: 'New Conversation',
+      title: 'New Inquiry',
       tenant_id: 'default_tenant',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -78,10 +150,10 @@ export default function ChatPage() {
       if (activeConvId === id) {
         setMessages([]);
         setActiveArtifact(null);
-        setActiveConvId('');
+        handleNewChat();
       }
     },
-    [activeConvId, setMessages, setActiveArtifact]
+    [activeConvId, setMessages, setActiveArtifact, handleNewChat]
   );
 
   const handleSend = (text: string) => {
@@ -93,9 +165,18 @@ export default function ChatPage() {
     sendMessage({
       conversationId: convId,
       message: text,
-      modelRole,
       incognito,
     });
+  };
+
+  const handleExportVault = () => {
+    // Trigger download of vault bundle
+    const link = document.createElement('a');
+    link.href = '/v1/memory/vault/export';
+    link.download = 'vault.zip';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleClarifyReply = (answer: string) => {
@@ -107,7 +188,6 @@ export default function ChatPage() {
       sendMessage({
         conversationId: activeConvId,
         message: 'Proceed with approved action.',
-        modelRole,
         incognito,
         approvalToken: token,
       });
@@ -118,7 +198,7 @@ export default function ChatPage() {
           id: `sys_${Date.now()}`,
           conversation_id: activeConvId,
           role: 'assistant',
-          content: '❌ Action was rejected by user.',
+          content: '❌ Action cancelled.',
           citations: [],
           artifacts: [],
           code_executions: [],
@@ -127,14 +207,49 @@ export default function ChatPage() {
     }
   };
 
-  // Collect all citations from the latest assistant message
-  const lastAsstMsg = [...messages].reverse().find((m) => m.role === 'assistant');
-  const currentCitations = lastAsstMsg?.citations || [];
+  // Collect all citations across messages for the sources sheet
+  const allCitations = messages.flatMap((m) => m.citations || []);
+  const activeChatTitle = conversations.find((c) => c.id === activeConvId)?.title;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background">
-      {/* Sidebar */}
-      <Sidebar
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-sans">
+      {/* 1. Minimal Header */}
+      <Header
+        title={activeChatTitle}
+        incognito={incognito}
+        onToggleIncognito={() => setIncognito((prev) => !prev)}
+        onOpenHistory={() => setHistoryOpen(true)}
+        onOpenMemory={() => setMemoryOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onNewChat={handleNewChat}
+      />
+
+      {/* 2. Main Center Conversation Column */}
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+        <ChatArea
+          messages={messages}
+          onSendMessage={handleSend}
+          onClarifyReply={handleClarifyReply}
+          onApprovalDecision={handleApprovalDecision}
+          onOpenArtifact={(art: ArtifactItem) => {
+            setActiveArtifact(art);
+            setArtifactDrawerOpen(true);
+          }}
+          onOpenSources={() => setSourcesOpen(true)}
+        />
+
+        {/* 3. Pinned Composer */}
+        <Composer
+          onSendMessage={handleSend}
+          onStop={stopGeneration}
+          isStreaming={isStreaming}
+        />
+      </main>
+
+      {/* 4. Overlays (Rendered on same route) */}
+      <HistoryDrawer
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
         conversations={conversations}
         activeConversationId={activeConvId}
         onSelectConversation={(id) => {
@@ -144,66 +259,46 @@ export default function ChatPage() {
         }}
         onNewChat={handleNewChat}
         onDeleteConversation={handleDeleteConversation}
-        modelRole={modelRole}
-        onChangeModelRole={setModelRole}
-        incognito={incognito}
-        onToggleIncognito={() => setIncognito((prev) => !prev)}
       />
 
-      {/* Main Center Area */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        {/* Top Navbar */}
-        <header className="h-12 border-b border-border bg-surface px-4 flex items-center justify-between select-none">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-white tracking-tight truncate max-w-xs md:max-w-md">
-              {conversations.find((c) => c.id === activeConvId)?.title || 'Unified Assistant'}
-            </span>
-            {incognito && (
-              <span className="text-[10px] bg-white text-black font-bold px-1.5 py-0.5 rounded">
-                Incognito
-              </span>
-            )}
-          </div>
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        conversations={conversations}
+        onSelectConversation={(id) => {
+          setActiveConvId(id);
+          setMessages([]);
+          setActiveArtifact(null);
+        }}
+        onNewChat={handleNewChat}
+        onTogglePrivate={() => setIncognito((prev) => !prev)}
+        onOpenMemory={() => setMemoryOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onExportVault={handleExportVault}
+      />
 
-          <div className="flex items-center gap-2">
-            {(activeArtifact || currentCitations.length > 0) && (
-              <button
-                onClick={() => setDrawerOpen((prev) => !prev)}
-                className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border transition-colors ${
-                  drawerOpen
-                    ? 'bg-white text-black font-bold border-white'
-                    : 'bg-surface-raised text-muted border-border hover:text-white'
-                }`}
-                title="Toggle artifact and citation drawer"
-              >
-                <PanelRight className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Side Panel</span>
-              </button>
-            )}
-          </div>
-        </header>
+      <MemoryOverlay
+        isOpen={memoryOpen}
+        onClose={() => setMemoryOpen(false)}
+        onExportVault={handleExportVault}
+      />
 
-        {/* Chat Area */}
-        <ChatArea
-          messages={messages}
-          onClarifyReply={handleClarifyReply}
-          onApprovalDecision={handleApprovalDecision}
-        />
+      <SettingsOverlay
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
 
-        {/* Composer */}
-        <Composer
-          onSendMessage={handleSend}
-          onStop={stopGeneration}
-          isStreaming={isStreaming}
-        />
-      </main>
+      <SourcesSheet
+        isOpen={sourcesOpen}
+        onClose={() => setSourcesOpen(false)}
+        citations={allCitations}
+      />
 
-      {/* Right Drawer for Artifacts and Sources */}
-      {drawerOpen && (
+      {artifactDrawerOpen && activeArtifact && (
         <ArtifactDrawer
           artifact={activeArtifact}
-          citations={currentCitations}
-          onClose={() => setDrawerOpen(false)}
+          citations={allCitations}
+          onClose={() => setArtifactDrawerOpen(false)}
         />
       )}
     </div>

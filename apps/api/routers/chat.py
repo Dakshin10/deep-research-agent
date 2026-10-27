@@ -62,6 +62,7 @@ async def create_chat_turn(
             approval_token=req.approval_token,
         ):
             yield {
+                "id": event.event_id,
                 "event": event.type,
                 "data": event.model_dump_json(),
             }

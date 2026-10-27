@@ -77,6 +77,23 @@ export interface MessagePart {
   metadata?: Record<string, any>;
 }
 
+export interface UIActionItem {
+  type: 'ui_action';
+  turn_id: string;
+  action: string;
+  payload: Record<string, any>;
+}
+
+export interface JobUpdateItem {
+  type: 'job_update';
+  turn_id: string;
+  job_id: string;
+  status: string;
+  progress_pct: number;
+  summary?: string;
+  artifact_id?: string;
+}
+
 export interface ChatMessage {
   id: string;
   conversation_id: string;
@@ -90,6 +107,7 @@ export interface ChatMessage {
   clarification?: ClarificationItem;
   approval?: ApprovalItem;
   memories_used?: MemoryUsedItem['memories'];
+  ui_actions?: UIActionItem[];
   isStreaming?: boolean;
 }
 

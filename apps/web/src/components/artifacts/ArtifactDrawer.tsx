@@ -16,6 +16,16 @@ export function ArtifactDrawer({
   const [tab, setTab] = useState<'artifact' | 'sources'>('artifact');
   const [copied, setCopied] = useState(false);
 
+  React.useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   if (!artifact && citations.length === 0) return null;
 
   const handleDownload = () => {
