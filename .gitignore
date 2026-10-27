@@ -15,4 +15,5 @@ dist/
 .wrangler/
 vault/
 test_vault_*/
+*.tsbuildinfo
 
